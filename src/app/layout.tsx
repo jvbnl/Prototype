@@ -2,15 +2,14 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gymly · Billing",
+  title: "Prototypes",
   description:
-    "Self-serve billing for Gymly — plan, add-ons, usage, invoices and payment.",
+    "A small gallery of self-contained prototypes shipped from Claude Design.",
 };
 
-// The wireframe was authored at a fixed 1280px desktop width; mirror that so
-// the prototype reads correctly on any device.
 export const viewport: Viewport = {
-  width: 1280,
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

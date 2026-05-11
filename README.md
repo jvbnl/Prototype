@@ -1,36 +1,67 @@
-# Gymly Billing
+# Prototypes
 
-Self-serve billing page for Gymly, built from the mid-fi wireframe handoff
-(`Billing Page Wireframe.html` from `claude.ai/design`). Next.js (App Router) +
-React + TypeScript.
+A small gallery of self-contained prototypes shipped from Claude Design
+(`claude.ai/design`). Next.js (App Router) + React + TypeScript.
 
-## What's in here
+## Available prototypes
 
-- `src/app/layout.tsx` — root layout, Google Fonts, viewport set to the wireframe's
-  1280px desktop width.
-- `src/app/page.tsx` — renders the billing app.
-- `src/app/globals.css` — design tokens and component CSS from the prototype.
-- `src/App.tsx` — composes the page, owns top-level state (`"use client"`).
-- `src/billing/data.ts` — plans, add-ons, usage, invoices, support-plan and flow data (all mocked).
-- `src/billing/chrome.tsx` — settings sidebar, top bar, tab strip, state banner.
-- `src/billing/overview.tsx` — Summary-tab sections: current plan, bill preview, add-ons,
-  usage meter, payment method, support plan.
-- `src/billing/invoices.tsx` — single-stream invoices table.
-- `src/billing/plan-modal.tsx` — plan picker with 3 differentiators per tier and a shared
-  usage-rates strip.
-- `src/billing/support-modal.tsx` — full support-tier comparison with response-time SLA matrix.
-- `src/billing/flow-modal.tsx` — cancel / downgrade / upgrade multi-step flows.
-- `src/billing/tweaks.tsx` — floating panel for demoing account states and upsell prominence.
+- **Deal Checkout** (`#/deal-checkout`) — standalone Gymly checkout with a deal
+  state. Four variants (spotlight banner / hero replacement / summary integrated /
+  dedicated deal card) plus a tweaks panel for variant, deal type, sender,
+  urgency timer and applies-to.
+- **Gymly Billing** (`#/billing`) — self-serve billing settings: current plan,
+  bill preview, add-ons, support tier, payment method, invoices, and a full
+  feature-matrix Plans tab with monthly/yearly billing.
 
-The model is **single-invoice, monthly-only**: plan + add-ons + payment-processing fees are
-bundled into one invoice on the 1st of every month.
+The landing page at `/` lists every prototype. Selecting one updates the URL
+hash; back-navigation returns to the gallery.
+
+## Layout
+
+```
+src/
+  app/
+    layout.tsx          # Next.js root layout, viewport, Google Fonts
+    page.tsx            # renders <App />
+    globals.css         # minimal resets only — prototypes ship their own CSS
+  App.tsx               # client-side hash router: '#/' → Home, '#/<slug>' → prototype
+  home/
+    Home.tsx            # prototype gallery (client component)
+    home.css            # gallery styles (injected when Home mounts)
+  prototypes/
+    registry.ts         # list of prototypes (slug, title, component)
+    billing/            # Gymly Billing prototype + its styles.css
+    deal-checkout/      # Deal Checkout prototype + its styles.css
+```
+
+Each prototype owns its CSS as a `?raw`-imported string (configured in
+`next.config.mjs`). The root component appends it as a `<style>` tag on mount
+and removes it on unmount, so prototypes stay fully isolated from each other
+and from the homepage. Routing is hash-based so the whole app stays a single
+Next.js page.
+
+## Adding a new prototype
+
+1. Create `src/prototypes/<slug>/<Name>Prototype.tsx` and a `styles.css`
+   next to it. Mark the component as a client component and inject the CSS:
+   ```tsx
+   "use client";
+   import css from "./styles.css?raw";
+   useEffect(() => {
+     const s = document.createElement("style");
+     s.textContent = css;
+     document.head.appendChild(s);
+     return () => s.remove();
+   }, []);
+   ```
+2. Register it in `src/prototypes/registry.ts`.
 
 ## Scripts
 
 ```bash
 npm install
 npm run dev        # http://localhost:3000
-npm run build      # production build (.next/)
+npm run build      # type-check + production build (.next/)
 npm run start      # serve the production build
 npm run typecheck
 ```
