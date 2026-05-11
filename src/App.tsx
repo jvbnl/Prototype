@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { ADDONS_BASE, GYM, PLANS } from "./billing/data";
 import type { Addon, PlanKey } from "./billing/data";
