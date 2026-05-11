@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ADDONS_BASE, GYM, PLANS } from "./billing/data";
-import type { Addon, PlanKey } from "./billing/data";
+import type { Addon, BillingCycle, PlanKey } from "./billing/data";
 import { SettingsNav, StateBanner, Tabs, TopBar } from "./billing/chrome";
 import {
   AddonsSection,
@@ -27,7 +27,13 @@ export function App() {
 
   const [addons, setAddons] = useState<Addon[]>(ADDONS_BASE);
   const [tab, setTab] = useState<string>("Summary");
+  // The user's current billing cycle. The PlanModal owns its own preview state
+  // but defaults to (and writes back into) this on confirm. The Tweaks panel
+  // lets us flip it so reviewers can see both invoice breakdowns.
+  const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const [planOpen, setPlanOpen] = useState(false);
+  const [planModalInitialCycle, setPlanModalInitialCycle] =
+    useState<BillingCycle | null>(null);
   const [supportOpen, setSupportOpen] = useState(false);
   const [flow, setFlow] = useState<FlowState>({
     open: false,
@@ -35,6 +41,10 @@ export function App() {
     targetTier: null,
   });
 
+  const openPlanModal = (initialCycle?: BillingCycle) => {
+    setPlanModalInitialCycle(initialCycle ?? null);
+    setPlanOpen(true);
+  };
   const openFlow = (mode: FlowMode, targetTier: PlanKey | null) => {
     setPlanOpen(false);
     setFlow({ open: true, mode, targetTier });
@@ -68,12 +78,15 @@ export function App() {
               <StateBanner state={tweaks.accountState} />
               <CurrentPlan
                 state={tweaks.accountState}
-                onManage={() => setPlanOpen(true)}
+                cycle={billingCycle}
+                onManage={() => openPlanModal()}
                 onViewAll={() => setTab("Plans")}
+                onSwitchToYearly={() => openPlanModal("yearly")}
               />
               <div style={{ height: 26 }} />
               <BillPreview
                 addons={addons}
+                cycle={billingCycle}
                 showAnnotations={tweaks.showAnnotations}
               />
               <SupportPlanSection
@@ -164,13 +177,18 @@ export function App() {
                 >
                   {(Object.keys(PLANS) as PlanKey[]).map((k) => {
                     const p = PLANS[k];
+                    const price = billingCycle === "yearly" ? p.y : p.m;
                     return (
                       <div key={k} className="planopt">
                         <div className="name">{p.name}</div>
                         <div className="price">
-                          {E(p.m)} <small>/month</small>
+                          {E(price)} <small>/month</small>
                         </div>
-                        <div className="small muted">Billed monthly</div>
+                        <div className="small muted">
+                          {billingCycle === "yearly"
+                            ? `Billed yearly · ${E(p.y * 12)}/year`
+                            : "Billed monthly"}
+                        </div>
                         <ul>
                           <li>Locations: {p.locations}</li>
                           <li className="muted">{p.tagline}</li>
@@ -187,7 +205,10 @@ export function App() {
 
       <PlanModal
         open={planOpen}
+        cycle={billingCycle}
+        initialCycle={planModalInitialCycle}
         onClose={() => setPlanOpen(false)}
+        onCycleChange={(c) => setBillingCycle(c)}
         onUpgrade={(k) => openFlow("upgrade", k)}
         onDowngrade={(k) => openFlow("downgrade", k)}
       />
@@ -201,7 +222,9 @@ export function App() {
       <TweaksPanel
         tweaks={tweaks}
         setTweak={setTweak}
-        onOpenPlan={() => setPlanOpen(true)}
+        cycle={billingCycle}
+        setCycle={setBillingCycle}
+        onOpenPlan={() => openPlanModal()}
         onOpenSupport={() => setSupportOpen(true)}
         onOpenUpgrade={() => openFlow("upgrade", "pro")}
         onOpenDowngrade={() => openFlow("downgrade", "starter")}
