@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ADDONS_BASE, GYM, PLANS } from "./billing/data";
+import {
+  ADDONS_BASE,
+  CURRENT_PLAN_KEY,
+  GYM,
+  PLANS,
+  YEARLY_DISCOUNT_PCT,
+  yearlySavings,
+  yearlyTotal,
+} from "./billing/data";
 import type { Addon, BillingCycle, PlanKey } from "./billing/data";
 import { SettingsNav, StateBanner, Tabs, TopBar } from "./billing/chrome";
 import {
@@ -19,6 +27,25 @@ import type { FlowMode, FlowState } from "./billing/flow-modal";
 import { E } from "./billing/utils";
 import { TWEAK_DEFAULTS, TweaksPanel } from "./billing/tweaks";
 import type { Tweaks } from "./billing/tweaks";
+import { CycleToggle, FeatureMatrix } from "./billing/feature-matrix";
+
+const PLAN_TAB_DIFFS: Record<PlanKey, { k: string; v: string }[]> = {
+  studio: [
+    { k: "Locations", v: "1" },
+    { k: "Family / org accounts", v: "—" },
+    { k: "Advanced reports", v: "—" },
+  ],
+  starter: [
+    { k: "Locations", v: "Unlimited" },
+    { k: "Family accounts", v: "Included" },
+    { k: "Advanced reports", v: "—" },
+  ],
+  pro: [
+    { k: "Locations", v: "Unlimited" },
+    { k: "Organizations", v: "Included" },
+    { k: "Advanced reports", v: "Included" },
+  ],
+};
 
 export function App() {
   const [tweaks, setTweaks] = useState<Tweaks>(TWEAK_DEFAULTS);
@@ -156,46 +183,237 @@ export function App() {
             <div className="section">
               <div className="sect-head">
                 <div>
-                  <h2>Plans</h2>
+                  <h2>Plans &amp; features</h2>
                   <div className="sub">
-                    Compare base plans. Switching is handled in the "Change plan" modal.
+                    Compare every Gymly plan. Switching is handled in the "Change plan"
+                    modal.
                   </div>
                 </div>
-                <div className="right">
-                  <button
-                    className="btn primary"
-                    onClick={() => setPlanOpen(true)}
-                  >
-                    Open change-plan flow
+                <div className="gap-row">
+                  <CycleToggle cycle={billingCycle} onChange={setBillingCycle} />
+                  <button className="btn primary" onClick={() => openPlanModal()}>
+                    Change plan
                   </button>
                 </div>
               </div>
-              <div className="card" style={{ padding: 20 }}>
-                <div
-                  className="plans"
-                  style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
-                >
-                  {(Object.keys(PLANS) as PlanKey[]).map((k) => {
-                    const p = PLANS[k];
-                    const price = billingCycle === "yearly" ? p.y : p.m;
-                    return (
-                      <div key={k} className="planopt">
-                        <div className="name">{p.name}</div>
-                        <div className="price">
-                          {E(price)} <small>/month</small>
+
+              {/* Plan cards — same vocabulary as the picker modal, but always-on
+                  cards on the page itself. Current plan is highlighted in-card. */}
+              <div className="plans" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+                {(Object.keys(PLANS) as PlanKey[]).map((k) => {
+                  const p = PLANS[k];
+                  const isCurrent = k === CURRENT_PLAN_KEY;
+                  const price = billingCycle === "yearly" ? p.y : p.m;
+                  return (
+                    <div
+                      key={k}
+                      className={"planopt " + (isCurrent ? "selected" : "")}
+                      style={{ padding: "16px 16px 14px", gap: 5, cursor: "default" }}
+                    >
+                      <div className="spread" style={{ alignItems: "center" }}>
+                        <div className="name" style={{ fontSize: 14 }}>
+                          {p.name}
+                          {p.badge && (
+                            <span
+                              style={{
+                                marginLeft: 6,
+                                fontSize: 10,
+                                color: "var(--accent)",
+                                textTransform: "uppercase",
+                                letterSpacing: ".06em",
+                              }}
+                            >
+                              {p.badge}
+                            </span>
+                          )}
                         </div>
-                        <div className="small muted">
-                          {billingCycle === "yearly"
-                            ? `Billed yearly · ${E(p.y * 12)}/year`
-                            : "Billed monthly"}
-                        </div>
-                        <ul>
-                          <li>Locations: {p.locations}</li>
-                          <li className="muted">{p.tagline}</li>
-                        </ul>
+                        {isCurrent && (
+                          <span className="badge" style={{ color: "var(--ink-3)" }}>
+                            Current
+                          </span>
+                        )}
                       </div>
-                    );
-                  })}
+                      <div
+                        className="small muted"
+                        style={{
+                          marginTop: -2,
+                          marginBottom: 4,
+                          minHeight: 44,
+                          lineHeight: 1.35,
+                        }}
+                      >
+                        {p.tagline}
+                      </div>
+                      <div className="price" style={{ fontSize: 20, lineHeight: 1.1 }}>
+                        {E(price)}
+                        <small style={{ fontSize: 11 }}> /mo</small>
+                      </div>
+                      <div className="small muted">
+                        {billingCycle === "yearly" ? (
+                          <>
+                            {E(yearlyTotal(k))}/yr ·{" "}
+                            <span style={{ color: "var(--accent)", fontWeight: 500 }}>
+                              save {E(yearlySavings(k))}/yr
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            Billed monthly ·{" "}
+                            <span style={{ color: "var(--accent)" }}>
+                              {E(p.y)} on yearly
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div style={{ height: 6 }} />
+                      {PLAN_TAB_DIFFS[k].map((d, i) => (
+                        <div
+                          key={i}
+                          className="spread small"
+                          style={{
+                            padding: "4px 0",
+                            borderTop: "1px solid var(--line-2)",
+                            gap: 8,
+                          }}
+                        >
+                          <span className="muted" style={{ flex: "0 0 auto" }}>
+                            {d.k}
+                          </span>
+                          <span style={{ fontWeight: 500, whiteSpace: "nowrap" }}>
+                            {d.v}
+                          </span>
+                        </div>
+                      ))}
+                      <div style={{ height: 6 }} />
+                      <button
+                        className={"btn sm " + (isCurrent ? "" : "primary")}
+                        disabled={isCurrent}
+                        onClick={() => openPlanModal()}
+                      >
+                        {isCurrent ? "Current plan" : `Switch to ${p.name}`}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Full comparison matrix — always visible on this tab. */}
+              <div style={{ marginTop: 28 }}>
+                <div className="spread" style={{ marginBottom: 10 }}>
+                  <div>
+                    <h2 style={{ fontSize: 14, fontWeight: 600, margin: 0 }}>
+                      Compare features
+                    </h2>
+                    <div className="sub" style={{ color: "var(--ink-3)", fontSize: 12.5 }}>
+                      Every feature, side-by-side. Differences highlighted; uniform
+                      features listed in the footer.
+                    </div>
+                  </div>
+                  <a
+                    href="#"
+                    className="small"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    Full pricing page ↗
+                  </a>
+                </div>
+                <FeatureMatrix highlightKey={CURRENT_PLAN_KEY} />
+              </div>
+
+              {/* Usage rates — applies to every plan, mirrors the picker modal. */}
+              <div style={{ marginTop: 24 }}>
+                <div className="spread" style={{ marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>
+                    Usage-based charges{" "}
+                    <span className="small muted" style={{ fontWeight: 400 }}>
+                      apply to every plan
+                    </span>
+                  </div>
+                  <a
+                    href="#"
+                    className="small"
+                    onClick={(e) => e.preventDefault()}
+                  >
+                    How usage is billed ↗
+                  </a>
+                </div>
+                <div className="card" style={{ padding: "10px 14px" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(2, 1fr)",
+                      gap: 14,
+                    }}
+                  >
+                    <div className="stack-tight">
+                      <span className="small muted">Payment processing</span>
+                      <span className="mono" style={{ fontSize: 13 }}>
+                        € 0,29{" "}
+                        <small
+                          className="muted"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          per transaction · iDEAL, SEPA, Bancontact, card
+                        </small>
+                      </span>
+                    </div>
+                    <div className="stack-tight">
+                      <span className="small muted">Transactional email</span>
+                      <span className="mono" style={{ fontSize: 13 }}>
+                        Included{" "}
+                        <small
+                          className="muted"
+                          style={{ fontFamily: "var(--font-sans)" }}
+                        >
+                          booking confirmations, reminders, receipts
+                        </small>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Business plan callout — sales-led, not self-serve. */}
+              <div
+                className="card"
+                style={{
+                  marginTop: 24,
+                  padding: "18px 22px",
+                  display: "grid",
+                  gridTemplateColumns: "1fr auto",
+                  gap: 16,
+                  alignItems: "center",
+                  background: "var(--bg-2)",
+                }}
+              >
+                <div className="stack-tight">
+                  <div style={{ fontSize: 14, fontWeight: 600 }}>
+                    Business — for franchises &amp; chains
+                  </div>
+                  <div className="small muted" style={{ lineHeight: 1.5 }}>
+                    Custom SLA, dedicated account manager, developer API &amp; webhooks,
+                    custom integrations, and a custom-branded app in the App Store and
+                    Play Store. Priced from € 599 / month based on scope —{" "}
+                    {YEARLY_DISCOUNT_PCT}% off on yearly.
+                  </div>
+                </div>
+                <div className="gap-row">
+                  <a
+                    href="#"
+                    className="btn sm"
+                    onClick={(e) => e.preventDefault()}
+                    style={{ textDecoration: "none" }}
+                  >
+                    Pricing details ↗
+                  </a>
+                  <a
+                    href="#"
+                    className="btn sm primary"
+                    onClick={(e) => e.preventDefault()}
+                    style={{ textDecoration: "none" }}
+                  >
+                    Contact sales
+                  </a>
                 </div>
               </div>
             </div>
