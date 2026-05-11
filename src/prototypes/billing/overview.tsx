@@ -4,26 +4,42 @@ import {
   SUPPORT_PLANS,
   USAGE,
   GYM,
+  YEARLY_DISCOUNT_PCT,
+  yearlySavings,
+  yearlyTotal,
 } from "./data";
 import type {
   AccountState,
   Addon,
+  BillingCycle,
   SupportKey,
   UpsellMode,
 } from "./data";
 import { E } from "./utils";
 
+// Yearly invoices are paid up front; the next time the plan line shows up on
+// an invoice is the renewal date. Monthly bundles plan + usage every period.
+const NEXT_PLAN_RENEWAL_YEARLY = "Dec 31, 2026";
+const NEXT_INVOICE_MONTHLY = "Jun 1, 2026";
+
 export function CurrentPlan({
   state,
+  cycle,
   onManage,
   onViewAll,
+  onSwitchToYearly,
 }: {
   state: AccountState;
+  cycle: BillingCycle;
   onManage: () => void;
   onViewAll: () => void;
+  onSwitchToYearly: () => void;
 }) {
   const plan = PLANS[CURRENT_PLAN_KEY];
-  const renew = "Jun 1, 2026";
+  const isYearly = cycle === "yearly";
+  const price = isYearly ? plan.y : plan.m;
+  const renew = isYearly ? NEXT_PLAN_RENEWAL_YEARLY : NEXT_INVOICE_MONTHLY;
+  const savings = yearlySavings(CURRENT_PLAN_KEY);
 
   let pill = <span className="pill ok">● Active</span>;
   if (state === "trial") pill = <span className="pill warn">● Trial — 6 days left</span>;
@@ -41,25 +57,67 @@ export function CurrentPlan({
       <div className="cell price">
         <div className="label">Plan price</div>
         <div className="value">
-          {E(plan.m)} <span className="small muted">/month</span>
+          {E(price)} <span className="small muted">/month</span>
         </div>
-        <div className="small muted">Billed monthly · cancel any time</div>
+        <div className="small muted">
+          {isYearly
+            ? `Billed yearly · ${E(yearlyTotal(CURRENT_PLAN_KEY))}/year`
+            : "Billed monthly · cancel any time"}
+        </div>
+        {!isYearly && state === "active" && (
+          <button
+            type="button"
+            onClick={onSwitchToYearly}
+            className="save"
+            style={{
+              background: "none",
+              border: 0,
+              padding: 0,
+              cursor: "pointer",
+              textAlign: "left",
+              textDecoration: "underline",
+              textUnderlineOffset: 2,
+              textDecorationColor: "var(--line)",
+              marginTop: 4,
+            }}
+          >
+            Switch to yearly · save {E(savings)}/year ({YEARLY_DISCOUNT_PCT}% off) →
+          </button>
+        )}
       </div>
       <div className="cell">
         <div className="label">
-          {state === "downgrade-pending" ? "Plan changes on" : "Next invoice"}
+          {state === "downgrade-pending"
+            ? "Plan changes on"
+            : isYearly
+              ? "Plan renews"
+              : "Next invoice"}
         </div>
         <div className="value mono" style={{ fontWeight: 500 }}>
           {renew}
         </div>
         <div className="small muted">
-          One invoice per month{" "}
-          <span
-            className="info-i"
-            title="Plan, add-ons and payment-processing fees are bundled into one invoice on the 1st of every month."
-          >
-            i
-          </span>
+          {isYearly ? (
+            <>
+              Add-ons & usage billed monthly{" "}
+              <span
+                className="info-i"
+                title="On the yearly cycle the plan is paid up front. Add-ons and payment-processing fees are still invoiced at the start of each month."
+              >
+                i
+              </span>
+            </>
+          ) : (
+            <>
+              One invoice per month{" "}
+              <span
+                className="info-i"
+                title="Plan, add-ons and payment-processing fees are bundled into one invoice on the 1st of every month."
+              >
+                i
+              </span>
+            </>
+          )}
         </div>
       </div>
       <div className="actions">
@@ -74,16 +132,22 @@ export function CurrentPlan({
   );
 }
 
-// One invoice per month: plan + add-ons + usage bundled together. Monthly only.
+// Monthly: plan + add-ons + usage are bundled into a single invoice on the 1st.
+// Yearly:  plan was paid up front, so the monthly invoice covers add-ons + usage
+// only — the plan line still appears as €0 with a "prepaid through" sub-copy
+// so the breakdown stays familiar.
 export function BillPreview({
   addons,
+  cycle,
   showAnnotations,
 }: {
   addons: Addon[];
+  cycle: BillingCycle;
   showAnnotations: boolean;
 }) {
   const plan = PLANS[CURRENT_PLAN_KEY];
-  const planThisMonth = plan.m;
+  const isYearly = cycle === "yearly";
+  const planThisMonth = isYearly ? 0 : plan.m;
 
   const activeAddons = addons.filter((a) => a.active);
   const addonTotal = activeAddons.reduce((s, a) => s + a.price * (a.qty || 1), 0);
@@ -99,7 +163,8 @@ export function BillPreview({
         <div>
           <h2>This month's bill — preview</h2>
           <div className="sub">
-            Estimated total for the period May 1 — May 31, 2026 · invoiced June 1 (single invoice)
+            Estimated total for the period May 1 — May 31, 2026 · invoiced June 1
+            {isYearly ? " (add-ons & usage only)" : " (single invoice)"}
           </div>
         </div>
         <div className="right">
@@ -111,7 +176,11 @@ export function BillPreview({
         <div className="head">
           <div>
             <h3>Estimated total — May 2026</h3>
-            <div className="sub">Plan, add-ons and usage on one invoice · charged Jun 1</div>
+            <div className="sub">
+              {isYearly
+                ? `Add-ons and usage only · plan prepaid through ${NEXT_PLAN_RENEWAL_YEARLY}`
+                : "Plan, add-ons and usage on one invoice · charged Jun 1"}
+            </div>
           </div>
           <div className="total">
             {E(total)}
@@ -121,21 +190,49 @@ export function BillPreview({
         <div className="why">
           <span className="ico">ⓘ</span>
           <div>
-            <b>One invoice per month.</b> Plan, add-ons and payment-processing fees are bundled
-            together and charged on the 1st of every month.
+            {isYearly ? (
+              <>
+                <b>Plan prepaid for the year.</b> Your plan is paid through{" "}
+                {NEXT_PLAN_RENEWAL_YEARLY}. This month's invoice covers add-ons and
+                payment-processing fees only — same monthly billing date, smaller amount.
+              </>
+            ) : (
+              <>
+                <b>One invoice per month.</b> Plan, add-ons and payment-processing fees are
+                bundled together and charged on the 1st of every month.
+              </>
+            )}
           </div>
         </div>
         <div className="grp">
           <div className="ghead">
             <span>Plan</span>
-            <span className="cycle">billed monthly</span>
+            <span className="cycle">
+              {isYearly ? "prepaid yearly" : "billed monthly"}
+            </span>
           </div>
           <div className="line">
             <div className="name">
-              Gymly {plan.name} <small>Monthly subscription</small>
+              Gymly {plan.name}{" "}
+              <small>
+                {isYearly
+                  ? `Prepaid through ${NEXT_PLAN_RENEWAL_YEARLY}`
+                  : "Monthly subscription"}
+              </small>
             </div>
-            <div className="qty">1 × {E(plan.m)}</div>
-            <div className="amt">{E(plan.m)}</div>
+            <div className="qty">
+              {isYearly ? `${E(plan.y)} × 12 paid up front` : `1 × ${E(plan.m)}`}
+            </div>
+            <div className="amt">
+              {isYearly ? (
+                <>
+                  {E(0)}
+                  <small>this period</small>
+                </>
+              ) : (
+                E(plan.m)
+              )}
+            </div>
           </div>
         </div>
         <div className="grp">
@@ -210,8 +307,9 @@ export function BillPreview({
 
       {showAnnotations && (
         <div className="note block">
-          ⚑ Single-invoice, monthly-only model: plan + add-ons + payment-processing fees on one
-          invoice each month. No SMS or storage charges (Gymly doesn't bill these).
+          {isYearly
+            ? "⚑ Yearly cycle view: plan line still shown for continuity but the period charge is € 0,00 (prepaid up front). Only add-ons + payment-processing fees roll into this month's invoice."
+            : "⚑ Monthly cycle view: plan + add-ons + payment-processing fees on one invoice each month. No SMS or storage charges (Gymly doesn't bill these)."}
         </div>
       )}
     </div>

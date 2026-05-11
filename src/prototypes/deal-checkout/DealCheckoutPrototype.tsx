@@ -1,7 +1,9 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { VariantOne, VariantTwo, VariantThree, VariantFour } from "./variants";
 import { computePricing, type Cycle, type Deal, type DealSource } from "./checkout";
-import dealCheckoutCss from "./styles.css?inline";
+import dealCheckoutCss from "./styles.css?raw";
 
 type VariantKey = "v1" | "v2" | "v3" | "v4";
 type DealType = "percent" | "fixed" | "free_month";

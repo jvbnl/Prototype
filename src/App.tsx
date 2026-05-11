@@ -1,28 +1,37 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { Home } from "./home/Home";
 import { getPrototype } from "./prototypes/registry";
 
 function readSlug(): string {
+  if (typeof window === "undefined") return "";
   const hash = window.location.hash.replace(/^#\/?/, "");
   return hash.trim();
 }
 
 export function App() {
-  const [slug, setSlug] = useState<string>(() => readSlug());
+  const [slug, setSlug] = useState<string>("");
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
+    setSlug(readSlug());
+    setHydrated(true);
     const onHash = () => setSlug(readSlug());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     document.title = slug
       ? `${getPrototype(slug)?.title ?? "Not found"} · Prototypes`
       : "Prototypes";
-  }, [slug]);
+  }, [slug, hydrated]);
 
-  if (!slug) return <Home />;
+  // SSR pass renders the Home shell so the markup the server emits is meaningful
+  // even before the hash is read on the client.
+  if (!hydrated || !slug) return <Home />;
 
   const proto = getPrototype(slug);
   if (!proto) return <NotFound slug={slug} />;

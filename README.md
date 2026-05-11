@@ -1,29 +1,32 @@
 # Prototypes
 
 A small gallery of self-contained prototypes shipped from Claude Design
-(`claude.ai/design`). React + TypeScript + Vite.
+(`claude.ai/design`). Next.js (App Router) + React + TypeScript.
 
 ## Available prototypes
 
 - **Deal Checkout** (`#/deal-checkout`) — standalone Gymly checkout with a deal
   state. Four variants (spotlight banner / hero replacement / summary integrated /
-  dedicated deal card) plus a tweaks panel for variant, deal type, sender, urgency
-  timer and applies-to.
+  dedicated deal card) plus a tweaks panel for variant, deal type, sender,
+  urgency timer and applies-to.
 - **Gymly Billing** (`#/billing`) — self-serve billing settings: current plan,
-  bill preview, add-ons, support tier, payment method and invoices. Account
-  state and upsell prominence toggleable via Tweaks.
+  bill preview, add-ons, support tier, payment method, invoices, and a full
+  feature-matrix Plans tab with monthly/yearly billing.
 
-The landing page at `/` (hash `#/`) lists every prototype.
+The landing page at `/` lists every prototype. Selecting one updates the URL
+hash; back-navigation returns to the gallery.
 
 ## Layout
 
 ```
-index.html              # generic shell, just renders #root
 src/
-  main.tsx              # mounts <App />
-  App.tsx               # hash router: '#/' → Home, '#/<slug>' → prototype
+  app/
+    layout.tsx          # Next.js root layout, viewport, Google Fonts
+    page.tsx            # renders <App />
+    globals.css         # minimal resets only — prototypes ship their own CSS
+  App.tsx               # client-side hash router: '#/' → Home, '#/<slug>' → prototype
   home/
-    Home.tsx            # prototype gallery
+    Home.tsx            # prototype gallery (client component)
     home.css            # gallery styles (injected when Home mounts)
   prototypes/
     registry.ts         # list of prototypes (slug, title, component)
@@ -31,16 +34,19 @@ src/
     deal-checkout/      # Deal Checkout prototype + its styles.css
 ```
 
-Each prototype owns its CSS as a `?inline`-imported string. The root component
-appends it as a `<style>` tag on mount and removes it on unmount, so prototypes
-stay fully isolated from each other (and from the homepage).
+Each prototype owns its CSS as a `?raw`-imported string (configured in
+`next.config.mjs`). The root component appends it as a `<style>` tag on mount
+and removes it on unmount, so prototypes stay fully isolated from each other
+and from the homepage. Routing is hash-based so the whole app stays a single
+Next.js page.
 
 ## Adding a new prototype
 
 1. Create `src/prototypes/<slug>/<Name>Prototype.tsx` and a `styles.css`
-   next to it. In the component, inject the CSS:
+   next to it. Mark the component as a client component and inject the CSS:
    ```tsx
-   import css from "./styles.css?inline";
+   "use client";
+   import css from "./styles.css?raw";
    useEffect(() => {
      const s = document.createElement("style");
      s.textContent = css;
@@ -54,7 +60,8 @@ stay fully isolated from each other (and from the homepage).
 
 ```bash
 npm install
-npm run dev        # http://localhost:5173
-npm run build      # type-check + production bundle to dist/
+npm run dev        # http://localhost:3000
+npm run build      # type-check + production build (.next/)
+npm run start      # serve the production build
 npm run typecheck
 ```

@@ -1,6 +1,8 @@
+"use client";
+
 import { useEffect } from "react";
 import { PROTOTYPES, type PrototypeMeta } from "../prototypes/registry";
-import homeCss from "./home.css?inline";
+import homeCss from "./home.css?raw";
 
 export function Home() {
   useEffect(() => {

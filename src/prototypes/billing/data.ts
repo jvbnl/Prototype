@@ -2,14 +2,21 @@ export type AccountState = "active" | "trial" | "past-due" | "downgrade-pending"
 export type UpsellMode = "subtle" | "medium" | "aggressive";
 export type SupportKey = "standard" | "enhanced" | "premium";
 export type PlanKey = "studio" | "starter" | "pro";
+export type BillingCycle = "monthly" | "yearly";
 
 export type Plan = {
   name: string;
+  // Monthly price billed monthly.
   m: number;
+  // Monthly-equivalent price when billed yearly (after the 20% discount).
+  y: number;
   tagline: string;
   locations: string;
   badge?: string;
 };
+
+// Public pricing on gymly.io shows -20% on the yearly cycle across all plans.
+export const YEARLY_DISCOUNT_PCT = 20;
 
 export type Addon = {
   id: string;
@@ -60,12 +67,14 @@ export type Priority = {
 
 export const GYM = { name: "CrossFit Amsterdam", locations: 2 };
 
-// Self-serve tiers from the Notion Pricing Feature Matrix — monthly only.
+// Self-serve tiers from the Notion Pricing Feature Matrix.
 // Business is high-touch (sales) and intentionally excluded here.
+// Yearly price = monthly × 0.8, displayed as the monthly-equivalent figure.
 export const PLANS: Record<PlanKey, Plan> = {
   studio: {
     name: "Studio",
     m: 99,
+    y: 79.2,
     tagline: "For small, single-location studios just getting started.",
     locations: "1",
     badge: "New",
@@ -73,18 +82,27 @@ export const PLANS: Record<PlanKey, Plan> = {
   starter: {
     name: "Starter",
     m: 169,
+    y: 135.2,
     tagline: "Everything you need to run your gym.",
     locations: "Unlimited",
   },
   pro: {
     name: "Pro",
     m: 299,
+    y: 239.2,
     tagline: "Grow your business, not your workload.",
     locations: "Unlimited",
   },
 };
 
 export const CURRENT_PLAN_KEY: PlanKey = "pro";
+// Resolve a plan's monthly figure based on the active billing cycle.
+export const planPrice = (key: PlanKey, cycle: BillingCycle) =>
+  cycle === "yearly" ? PLANS[key].y : PLANS[key].m;
+// Annual total billed up front on the yearly cycle.
+export const yearlyTotal = (key: PlanKey) => PLANS[key].y * 12;
+// Annual savings vs paying monthly for 12 months.
+export const yearlySavings = (key: PlanKey) => (PLANS[key].m - PLANS[key].y) * 12;
 
 export const ADDONS_BASE: Addon[] = [
   {
@@ -290,9 +308,9 @@ export const SAVE_OFFERS: Record<ReasonId, { title: string; body: string; cta: s
     cta: "Apply 30% off & keep plan",
   },
   features: {
-    title: "Pause your plan for up to 90 days",
-    body: "Keep your data, members and settings — billing pauses while you take a break. Unpause anytime.",
-    cta: "Pause for 90 days",
+    title: "Stay on your plan with 50% off for 3 months",
+    body: "Half-price for the next three months so you can give the features you're not using a proper shot before switching to a smaller plan.",
+    cta: "Apply 50% off & keep plan",
   },
   season: {
     title: "Pause for the season instead",
@@ -377,3 +395,114 @@ export const CANCEL_DELTA = {
     "All add-ons",
   ],
 };
+
+// ── Feature matrix ──────────────────────────────────────────────────────────
+// Sourced from the Notion Pricing Feature Matrix. Business plan is excluded
+// (high-touch, sales-led upsell). Only DIFFERENTIATED features are listed —
+// the table is meant to inform the upgrade decision, not catalog every check.
+// Uniform-across-plans features ("unlimited members", scheduling, payments,
+// etc.) are summarised in the matrix footer instead of rendered as 25 rows of
+// identical ✓ marks.
+
+export type FeatureValue = boolean | string;
+
+export type Feature = {
+  id: string;
+  label: string;
+  studio: FeatureValue;
+  starter: FeatureValue;
+  pro: FeatureValue;
+};
+
+export type FeatureCategory = {
+  id: string;
+  label: string;
+  features: Feature[];
+};
+
+export const FEATURE_MATRIX: FeatureCategory[] = [
+  {
+    id: "members",
+    label: "Members & locations",
+    features: [
+      { id: "locations", label: "Locations", studio: "1 location", starter: "Unlimited", pro: "Unlimited" },
+      { id: "family", label: "Family accounts", studio: false, starter: true, pro: true },
+      { id: "orgs", label: "Organizations / corporate accounts", studio: false, starter: false, pro: true },
+      { id: "branding", label: "Custom branding", studio: false, starter: true, pro: true },
+      { id: "loc-memberships", label: "Location-specific memberships", studio: false, starter: true, pro: true },
+    ],
+  },
+  {
+    id: "reports",
+    label: "Reports & analytics",
+    features: [
+      { id: "advanced-reports", label: "Advanced reports", studio: false, starter: false, pro: true },
+      { id: "revenue", label: "Revenue analytics", studio: false, starter: false, pro: true },
+      { id: "multi-country", label: "Multi-country support", studio: false, starter: true, pro: true },
+    ],
+  },
+  {
+    id: "payments",
+    label: "Payments & billing",
+    features: [
+      { id: "discount-codes", label: "Discount codes", studio: false, starter: true, pro: true },
+      { id: "multi-currency", label: "Multi-currency", studio: false, starter: false, pro: true },
+    ],
+  },
+  {
+    id: "bookings",
+    label: "Schedule & bookings",
+    features: [
+      { id: "appointments", label: "Appointments & tours", studio: false, starter: true, pro: true },
+      { id: "events", label: "Events", studio: false, starter: false, pro: true },
+      { id: "bring-friend", label: "Bring a Friend", studio: false, starter: true, pro: true },
+    ],
+  },
+  {
+    id: "comms",
+    label: "Communication",
+    features: [
+      { id: "email-templates", label: "Customizable email templates", studio: false, starter: true, pro: true },
+    ],
+  },
+  {
+    id: "member-app",
+    label: "Member app",
+    features: [
+      { id: "qr", label: "QR check-in (Gymly ID)", studio: false, starter: true, pro: true },
+      { id: "community", label: "Community home & feed", studio: false, starter: true, pro: true },
+      { id: "custom-branded-app", label: "Custom-branded app", studio: false, starter: true, pro: true },
+    ],
+  },
+  {
+    id: "leads",
+    label: "Leads & acquisition",
+    features: [
+      { id: "leads-dash", label: "Leads dashboard & conversion tracking", studio: false, starter: false, pro: true },
+      { id: "widget", label: "Website widget (bookings, leads, guests)", studio: false, starter: false, pro: true },
+      { id: "guest-reg", label: "Guest registration & payments", studio: false, starter: false, pro: true },
+      { id: "contact-form", label: "Contact form (via widget)", studio: false, starter: false, pro: true },
+      { id: "widget-branding", label: "Widget branding", studio: false, starter: false, pro: true },
+    ],
+  },
+  {
+    id: "ops",
+    label: "Operations",
+    features: [
+      { id: "pos", label: "Point of Sale", studio: false, starter: false, pro: true },
+      { id: "payroll", label: "Payroll & staff hours", studio: false, starter: false, pro: true },
+    ],
+  },
+];
+
+// Plans share all of these — surfaced as a one-line footer in the matrix.
+export const FEATURE_MATRIX_COMMON = [
+  "Unlimited members",
+  "Class scheduling, capacity & waitlist",
+  "Automatic recurring payments & invoicing",
+  "Member app with class booking",
+  "Workout builder, routines & training logs",
+  "In-app, push & email notifications",
+  "Basic reports",
+  "Standard support",
+];
