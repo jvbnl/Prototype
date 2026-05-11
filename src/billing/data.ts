@@ -308,9 +308,9 @@ export const SAVE_OFFERS: Record<ReasonId, { title: string; body: string; cta: s
     cta: "Apply 30% off & keep plan",
   },
   features: {
-    title: "Pause your plan for up to 90 days",
-    body: "Keep your data, members and settings — billing pauses while you take a break. Unpause anytime.",
-    cta: "Pause for 90 days",
+    title: "Stay on your plan with 50% off for 3 months",
+    body: "Half-price for the next three months so you can give the features you're not using a proper shot before switching to a smaller plan.",
+    cta: "Apply 50% off & keep plan",
   },
   season: {
     title: "Pause for the season instead",
