@@ -278,8 +278,14 @@ function SignInSection() {
       </div>
 
       <div className="signin-noaccount">
-        <strong>Nog geen Gymly-account?</strong> Vul hieronder je gegevens in — we
-        maken er automatisch een aan tijdens het afrekenen.
+        <div className="signin-noaccount-head">Nog geen Gymly-account?</div>
+        <p className="signin-noaccount-body">
+          Begin gratis. Geen creditcard nodig. Upgrade wanneer je er klaar voor bent.
+        </p>
+        <a href="https://admin.gymly.io/onboarding" className="signin-free-btn">
+          Maak gratis account
+          <ArrowRight />
+        </a>
       </div>
     </div>
   );
