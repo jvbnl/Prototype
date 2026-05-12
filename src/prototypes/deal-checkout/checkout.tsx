@@ -164,68 +164,122 @@ export function computePricing({
 
 export function BillingForm() {
   return (
-    <div className="card">
-      <h2>Factuurgegevens</h2>
+    <div className="checkout-left">
+      <SignInSection />
 
-      <div className="field">
-        <label>Bedrijfsnaam</label>
-        <input type="text" defaultValue="Studio Test" />
+      <div className="card">
+        <h2>Factuurgegevens</h2>
+        <div className="field-help" style={{ marginTop: -12, marginBottom: 18 }}>
+          We maken hiermee automatisch een Gymly-account aan voor je studio.
+        </div>
+
+        <div className="field">
+          <label>Bedrijfsnaam</label>
+          <input type="text" defaultValue="Studio Test" />
+        </div>
+
+        <div className="field">
+          <label>E-mailadres voor bonnen</label>
+          <input type="email" defaultValue="joel@gymly.io" />
+          <div className="field-help">
+            Hier sturen we de bon en herinneringen voor verlenging naartoe.
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label>KvK-nummer</label>
+            <input type="text" defaultValue="12345678" />
+          </div>
+          <div className="field">
+            <label>BTW-nummer</label>
+            <input type="text" defaultValue="1234567890" />
+            <div className="field-help">Vereist voor btw-verlegging buiten Nederland.</div>
+          </div>
+        </div>
+
+        <div className="field">
+          <label>Telefoonnummer</label>
+          <div className="input-prefix">
+            <span className="pfx">
+              <NlFlag />
+            </span>
+            <input type="tel" defaultValue="+31612345678" />
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label>Adres</label>
+            <input type="text" defaultValue="Prins Bernhardstraat 1" />
+          </div>
+          <div className="field">
+            <label>Land</label>
+            <select defaultValue="NL">
+              <option value="NL">Nederland</option>
+              <option value="BE">België</option>
+              <option value="DE">Duitsland</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="field-row">
+          <div className="field">
+            <label>Postcode</label>
+            <input type="text" defaultValue="1211AB" />
+          </div>
+          <div className="field">
+            <label>Plaats</label>
+            <input type="text" defaultValue="Hilversum" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Stripe/Shopify-style auth surface at the top of checkout: returning users
+// can sign in for a faster path, new users continue with the form below which
+// implicitly creates their Gymly account on submit. No separate "register"
+// step — fewer dead-ends in the flow.
+function SignInSection() {
+  return (
+    <div className="card signin-card">
+      <div className="signin-head">
+        <div>
+          <h2 style={{ margin: 0 }}>Heb je al een Gymly-account?</h2>
+          <div className="field-help" style={{ marginTop: 4 }}>
+            Log in om je gegevens automatisch in te vullen.
+          </div>
+        </div>
+        <a href="#" className="signin-forgot">
+          Wachtwoord vergeten?
+        </a>
       </div>
 
-      <div className="field">
-        <label>E-mailadres voor bonnen</label>
-        <input type="email" defaultValue="joel@gymly.io" />
-        <div className="field-help">
-          Hier sturen we de bon en herinneringen voor verlenging naartoe.
+      <div className="field-row" style={{ marginTop: 16 }}>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>E-mailadres</label>
+          <input type="email" placeholder="jij@studio.nl" />
+        </div>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label>Wachtwoord</label>
+          <input type="password" placeholder="••••••••" />
         </div>
       </div>
 
-      <div className="field-row">
-        <div className="field">
-          <label>KvK-nummer</label>
-          <input type="text" defaultValue="12345678" />
-        </div>
-        <div className="field">
-          <label>BTW-nummer</label>
-          <input type="text" defaultValue="1234567890" />
-          <div className="field-help">Vereist voor btw-verlegging buiten Nederland.</div>
-        </div>
+      <button type="button" className="signin-btn">
+        Inloggen
+        <ArrowRight />
+      </button>
+
+      <div className="signin-divider">
+        <span>of</span>
       </div>
 
-      <div className="field">
-        <label>Telefoonnummer</label>
-        <div className="input-prefix">
-          <span className="pfx">
-            <NlFlag />
-          </span>
-          <input type="tel" defaultValue="+31612345678" />
-        </div>
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label>Adres</label>
-          <input type="text" defaultValue="Prins Bernhardstraat 1" />
-        </div>
-        <div className="field">
-          <label>Land</label>
-          <select defaultValue="NL">
-            <option value="NL">Nederland</option>
-            <option value="BE">België</option>
-            <option value="DE">Duitsland</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="field-row">
-        <div className="field">
-          <label>Postcode</label>
-          <input type="text" defaultValue="1211AB" />
-        </div>
-        <div className="field">
-          <label>Plaats</label>
-          <input type="text" defaultValue="Hilversum" />
-        </div>
+      <div className="signin-noaccount">
+        <strong>Nog geen Gymly-account?</strong> Vul hieronder je gegevens in — we
+        maken er automatisch een aan tijdens het afrekenen.
       </div>
     </div>
   );

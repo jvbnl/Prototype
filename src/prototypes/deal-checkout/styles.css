@@ -994,3 +994,82 @@ select.dc-twk-field {
   transition: transform 0.15s;
 }
 .dc-twk-toggle[data-on="1"] i { transform: translateX(14px); }
+
+/* ─── Sign-in section (top of checkout, above billing form) ─── */
+.checkout-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.signin-card {
+  padding: 22px 28px 24px;
+}
+.signin-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.signin-forgot {
+  font-size: 13px;
+  color: var(--brand);
+  text-decoration: none;
+  white-space: nowrap;
+  padding-top: 2px;
+}
+.signin-forgot:hover {
+  text-decoration: underline;
+}
+.signin-btn {
+  margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: var(--text);
+  color: #fff;
+  border: 0;
+  height: 38px;
+  padding: 0 18px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.signin-btn:hover {
+  background: #000;
+}
+.signin-divider {
+  position: relative;
+  text-align: center;
+  margin: 18px 0 14px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.signin-divider::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--border);
+  z-index: 0;
+}
+.signin-divider span {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  padding: 0 10px;
+}
+.signin-noaccount {
+  font-size: 13px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.signin-noaccount strong {
+  color: var(--text);
+  font-weight: 600;
+}
