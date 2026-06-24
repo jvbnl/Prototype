@@ -210,6 +210,43 @@
   -moz-appearance: textfield;
 }
 
+/* ── Cart bill line (tap-anywhere to edit, touch-optimised) ── */
+.pos-root .pos-bill-line {
+  transition: background 0.1s ease;
+}
+.pos-root .pos-bill-line:hover {
+  background: #fafafb;
+}
+.pos-root .pos-bill-line:active {
+  background: #f4ebff;
+}
+/* Quantity stepper buttons (44px square = Apple HIG min; Material 48dp aligned) */
+.pos-root .pos-step {
+  transition: background 0.08s ease;
+}
+.pos-root .pos-step:hover {
+  background: #f9f5ff;
+}
+.pos-root .pos-step:active {
+  background: #f4ebff;
+}
+/* Square tap targets (delete / confirm in cart) */
+.pos-root .pos-tap {
+  transition: background 0.1s ease;
+}
+.pos-root .pos-del-btn.pos-tap:hover {
+  background: #fef3f2;
+}
+.pos-root .pos-del-btn.pos-tap:active {
+  background: #fee4e2;
+}
+.pos-root .pos-ok-btn.pos-tap:hover {
+  background: #ecfdf3;
+}
+.pos-root .pos-ok-btn.pos-tap:active {
+  background: #d1fadf;
+}
+
 /* ── Floor ── */
 .pos-floor-subhead {
   flex-shrink: 0;

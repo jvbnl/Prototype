@@ -909,29 +909,32 @@ export function PosPrototype() {
     const badge = kind === "open" ? { background: "#ECFDF3", color: "#12B76A" } : { background: "#F2F4F7", color: "#98A2B3" };
     const txt = kind === "open" ? "#475467" : "#98A2B3";
     if (!editing)
+      // Tap-the-whole-row to edit — standard touch POS pattern (Square /
+      // Lightspeed / Toast all use this; no separate small pencil button).
       return (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: kind === "open" ? "9px 0" : "8px 0", borderBottom: "1px solid #F7F8FA" }}>
-          <div style={{ width: 26, height: 26, borderRadius: 7, ...badge, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 500, color: txt }}>{o.name}</div>
-          <div style={{ fontSize: 14, fontWeight: 600, color: txt }}>{fmt(o.price * o.qty)}</div>
-          <div className="pos-edit-btn" onClick={() => toggleEdit(o.oid)} title="Aantal wijzigen" style={{ width: 28, height: 28, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#98A2B3", flexShrink: 0 }}>
-            <PencilIcon />
-          </div>
+        <div
+          onClick={() => toggleEdit(o.oid)}
+          className="pos-bill-line"
+          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", margin: "0 -8px", borderRadius: 10, borderBottom: "1px solid #F7F8FA", cursor: "pointer", minHeight: 56 }}
+        >
+          <div style={{ width: 32, height: 32, borderRadius: 8, ...badge, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: txt }}>{o.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: txt }}>{fmt(o.price * o.qty)}</div>
         </div>
       );
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: kind === "open" ? "9px 0" : "8px 0", borderBottom: "1px solid #F7F8FA" }}>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: "#101828" }}>{o.name}</div>
-        <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 10, overflow: "hidden" }}>
-          <div onClick={onDec} style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, color: "#475467", cursor: "pointer" }}>{"−"}</div>
-          <div style={{ minWidth: 22, textAlign: "center", fontSize: 14, fontWeight: 700 }}>{o.qty}</div>
-          <div onClick={onInc} style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 19, color: PURPLE, cursor: "pointer" }}>+</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #F7F8FA", minHeight: 60 }}>
+        <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{o.name}</div>
+        <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 12, overflow: "hidden" }}>
+          <div onClick={onDec} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
+          <div style={{ minWidth: 32, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{o.qty}</div>
+          <div onClick={onInc} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer", userSelect: "none" }}>+</div>
         </div>
-        <div className="pos-del-btn" onClick={() => patch({ cancelOid: o.oid })} title="Annuleren" style={{ width: 34, height: 34, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#D92D20", flexShrink: 0 }}>
+        <div className="pos-del-btn pos-tap" onClick={() => patch({ cancelOid: o.oid })} title="Annuleren" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#D92D20", flexShrink: 0 }}>
           <XIcon />
         </div>
-        <div className="pos-ok-btn" onClick={() => toggleEdit(o.oid)} title="Klaar" style={{ width: 34, height: 34, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#12B76A", flexShrink: 0 }}>
-          <CheckIcon />
+        <div className="pos-ok-btn pos-tap" onClick={() => toggleEdit(o.oid)} title="Klaar" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#12B76A", flexShrink: 0 }}>
+          <CheckIcon size={18} />
         </div>
       </div>
     );
@@ -1174,17 +1177,17 @@ export function PosPrototype() {
                   <>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#6941C6", textTransform: "uppercase", letterSpacing: "0.04em", padding: "14px 0 4px" }}>Nieuw · nog niet verstuurd</div>
                     {newSrc.map((o) => (
-                      <div key={o.oid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0" }}>
+                      <div key={o.oid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", minHeight: 56 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 14, fontWeight: 600, color: "#101828" }}>{o.name}</div>
+                          <div style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{o.name}</div>
                           <div style={{ fontSize: 12, color: "#98A2B3" }}>{fmt(o.price)}</div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 10, overflow: "hidden" }}>
-                          <div onClick={() => decItem(o.oid)} style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: "#475467", cursor: "pointer" }}>{"−"}</div>
-                          <div style={{ minWidth: 24, textAlign: "center", fontSize: 14, fontWeight: 700 }}>{o.qty}</div>
-                          <div onClick={() => incItem(o.oid)} style={{ width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, color: PURPLE, cursor: "pointer" }}>+</div>
+                        <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 12, overflow: "hidden" }}>
+                          <div onClick={() => decItem(o.oid)} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
+                          <div style={{ minWidth: 32, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{o.qty}</div>
+                          <div onClick={() => incItem(o.oid)} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer", userSelect: "none" }}>+</div>
                         </div>
-                        <div style={{ width: 56, textAlign: "right", fontSize: 14, fontWeight: 700, color: "#101828" }}>{fmt(o.price * o.qty)}</div>
+                        <div style={{ width: 64, textAlign: "right", fontSize: 15, fontWeight: 700, color: "#101828" }}>{fmt(o.price * o.qty)}</div>
                       </div>
                     ))}
                   </>
