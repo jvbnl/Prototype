@@ -395,21 +395,28 @@ function CashCountGrid({ counts, onSet }: { counts: CashCounts; onSet: (key: str
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 10 }}>
       {DENOMS.map((d) => {
         const n = counts[d.key] || 0;
+        const has = n > 0;
         return (
-          <label key={d.key} className="pos-denom">
+          <div
+            key={d.key}
+            className="pos-denom"
+            role="button"
+            tabIndex={0}
+            onClick={() => onSet(d.key, Math.min(n + 1, 9999))}
+          >
             <span className="pos-denom-label">{d.label}</span>
-            <input
-              value={String(n)}
-              onChange={(e) => {
-                const v = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
-                onSet(d.key, isNaN(v) ? 0 : Math.min(v, 9999));
-              }}
-              onFocus={(e) => e.target.select()}
-              inputMode="numeric"
-              className="pos-denom-input"
-              style={{ color: n > 0 ? PURPLE : "#101828" }}
-            />
-          </label>
+            <span className="pos-denom-count" style={{ color: has ? PURPLE : "#101828" }}>{n}</span>
+            {has && (
+              <button
+                type="button"
+                className="pos-denom-minus"
+                onClick={(e) => { e.stopPropagation(); onSet(d.key, n - 1); }}
+                aria-label={`Eén ${d.label} eraf`}
+              >
+                −
+              </button>
+            )}
+          </div>
         );
       })}
     </div>
