@@ -838,15 +838,12 @@ export function PosPrototype() {
       const wc = m >= 30 ? { color: "#B42318", background: "#FEE4E2" } : m >= 15 ? { color: "#B54708", background: "#FEF0C7" } : { color: "#475467", background: "#F2F4F7" };
       const ic = (t.orders || []).reduce((a, o) => a + o.qty, 0);
       const lbl = tlabel(t);
-      const inKitchen = (nm: string) => s.tickets.some((k) => k.table === lbl && k.items.some((it) => it.name === nm));
-      type OrderStatus = "delivered" | "progress" | "new";
-      const lines: { name: string; qty: number; price: number; status: OrderStatus }[] = (t.orders || []).map((o) => ({
+      const lines: { name: string; qty: number; price: number }[] = (t.orders || []).map((o) => ({
         name: o.name,
         qty: o.qty,
         price: o.price,
-        status: !o.sent ? "new" : inKitchen(o.name) ? "progress" : "delivered",
       }));
-      const exp = t.id in s.expandOverrides ? s.expandOverrides[t.id] : m >= 10;
+      const exp = !!s.expandOverrides[t.id];
       return { t, m, wc, ic, lbl, lines, exp };
     })
     .sort((a, b) => b.m - a.m);
@@ -1285,12 +1282,6 @@ export function PosPrototype() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto" }}>
                   {openOrders.map(({ t, m, wc, ic, lbl, lines, exp }) => {
                     const note = s.tableNotes[t.id] || "";
-                    const statusMeta = (st: "delivered" | "progress" | "new") =>
-                      st === "delivered"
-                        ? { label: "Geleverd", color: "#12B76A", bg: "#ECFDF3" }
-                        : st === "progress"
-                        ? { label: "In bereiding", color: "#B54708", bg: "#FEF0C7" }
-                        : { label: "Nieuw", color: "#6941C6", bg: "#F4EBFF" };
                     return (
                     <div key={t.id} className="pos-oo-row" style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
                       <div onClick={() => setExpand(t.id, !exp)} style={{ display: "flex", alignItems: "center", gap: 18, padding: "15px 18px", cursor: "pointer" }}>
@@ -1309,17 +1300,13 @@ export function PosPrototype() {
                       {exp && (
                         <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "10px 18px 14px" }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0 6px" }}>Bestelling</div>
-                          {lines.map((ln, i) => {
-                            const sm = statusMeta(ln.status);
-                            return (
-                              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
-                                <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
-                                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: sm.bg, color: sm.color, whiteSpace: "nowrap" }}>{sm.label}</span>
-                                <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
-                              </div>
-                            );
-                          })}
+                          {lines.map((ln, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
+                              <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
+                            </div>
+                          ))}
                           <div style={{ marginTop: 12, display: "flex", alignItems: "flex-start", gap: 10, background: "#fff", border: "1px solid #E4E7EC", borderRadius: 12, padding: "10px 12px" }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#98A2B3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: 3, flexShrink: 0 }}>
                               <path d="M4 5h16M4 10h16M4 15h10" />
