@@ -659,11 +659,6 @@
   .pos-oo-wait {
     display: none !important;
   }
-  /* The floor screen drops the location logo on phone — the action buttons
-     (Orders / Keuken / Nieuw order / menu) need the room. */
-  .pos-floor-logo {
-    display: none !important;
-  }
   /* The "Spring naar" caption is implicit on mobile — the Bar / Terras pills
      speak for themselves. */
   .pos-jumpto-label {
