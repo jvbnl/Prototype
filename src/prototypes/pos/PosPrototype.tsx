@@ -76,9 +76,27 @@ interface PosState {
   nameInput: string;
   pendingAction: PendingAction;
   expandOverrides: Record<string, boolean>;
+  ordersTab: "open" | "closed";
+  closedOrders: ClosedOrder[];
+  selectedClosedId: string | null;
+  ordersQuery: string;
   now: number;
   tables: TableT[];
   tickets: Ticket[];
+}
+
+interface ClosedOrder {
+  id: string;
+  label: string;
+  paidAt: number;
+  total: number;
+  subtotal: number;
+  tip: number;
+  discount: number;
+  payment: string;
+  lines: { name: string; qty: number; price: number }[];
+  isWalkin: boolean;
+  area?: Area;
 }
 
 // ── Static data ────────────────────────────────────────
@@ -165,6 +183,16 @@ function makeInitialState(): PosState {
     nameInput: "",
     pendingAction: null,
     expandOverrides: {},
+    ordersTab: "open",
+    closedOrders: [
+      { id: "co1", label: "Tafel 12", paidAt: now - 600000, total: 22.0, subtotal: 22.0, tip: 0, discount: 0, payment: "pin", isWalkin: false, area: "bar", lines: [{ name: "Cappuccino", qty: 3, price: 3.4 }, { name: "Tosti ham-kaas", qty: 2, price: 4.5 }, { name: "Espresso", qty: 1, price: 2.8 }] },
+      { id: "co2", label: "Sophie", paidAt: now - 1800000, total: 16.3, subtotal: 16.3, tip: 0, discount: 0, payment: "pin", isWalkin: true, lines: [{ name: "Latte macchiato", qty: 1, price: 3.8 }, { name: "Bagel zalm", qty: 1, price: 7.5 }, { name: "Spa blauw", qty: 2, price: 2.5 }] },
+      { id: "co3", label: "Tafel 9", paidAt: now - 3300000, total: 42.0, subtotal: 44.5, tip: 2.5, discount: 5.0, payment: "pin", isWalkin: false, area: "bar", lines: [{ name: "Poke bowl", qty: 2, price: 11.5 }, { name: "Acai bowl", qty: 1, price: 9.5 }, { name: "Bitterballen", qty: 1, price: 6.0 }, { name: "Cola", qty: 2, price: 3.0 }] },
+      { id: "co4", label: "Tafel 23", paidAt: now - 5400000, total: 10.5, subtotal: 10.5, tip: 0, discount: 0, payment: "cash", isWalkin: false, area: "terras", lines: [{ name: "Buddha bowl", qty: 1, price: 10.5 }] },
+      { id: "co5", label: "Tafel 6", paidAt: now - 9000000, total: 7.2, subtotal: 7.2, tip: 0, discount: 0, payment: "account", isWalkin: false, area: "bar", lines: [{ name: "Flat white", qty: 2, price: 3.6 }] },
+    ],
+    selectedClosedId: null,
+    ordersQuery: "",
     now,
     tables: [
       { id: "b1", area: "bar", label: "1", seats: 2, status: "free", guests: 0, orders: [] },
@@ -268,6 +296,23 @@ function PlusIcon() {
   return (
     <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+function ReceiptIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z" />
+      <path d="M9 8h6M9 12h6M9 16h4" />
+    </svg>
+  );
+}
+function PrintIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M6 9V3h12v6" />
+      <rect x="3" y="9" width="18" height="9" rx="2" />
+      <path d="M7 15h10v6H7z" />
     </svg>
   );
 }
@@ -605,12 +650,26 @@ export function PosPrototype() {
     setCartSheetOpen(false);
     patch({ showCheckout: true });
   };
-  const finalizePaid = (grand: number) => {
+  const finalizePaid = (grand: number, breakdown: { subtotal: number; tip: number; discount: number; payment: string }) => {
     const id = s.activeTableId;
     const t = findTable(id);
     if (!t) return;
     const lbl = tlabel(t);
     const isWalk = !!t.walkin;
+    const closed: ClosedOrder = {
+      id: "co" + Date.now() + Math.random().toString(36).slice(2, 6),
+      label: lbl,
+      paidAt: Date.now(),
+      total: grand,
+      subtotal: breakdown.subtotal,
+      tip: breakdown.tip,
+      discount: breakdown.discount,
+      payment: breakdown.payment,
+      isWalkin: isWalk,
+      area: t.area,
+      lines: (t.orders || []).map((o) => ({ name: o.name, qty: o.qty, price: o.price })),
+    };
+    patch((st) => ({ closedOrders: [closed, ...st.closedOrders] }));
     if (isWalk) patch((st) => ({ tables: st.tables.filter((x) => x.id !== id) }));
     else updateTable(t.id, (tt) => ({ ...tt, status: "free", orders: [], guests: 0, resName: "", resTime: "", openedAt: null }));
     patch((st) => ({ tickets: st.tickets.filter((k) => k.table !== lbl), showCheckout: false, activeTableId: null, screen: "floor" }));
@@ -711,6 +770,13 @@ export function PosPrototype() {
   const BackBtn = () => (
     <div className="pos-icon-btn" onClick={backToFloor} style={{ fontSize: 20 }}>{"←"}</div>
   );
+  const OrdersButton = () => (
+    <div className="pos-btn" onClick={goOrders}>
+      <ReceiptIcon />
+      <span className="pos-btn-label">Orders</span>
+      {countOcc > 0 && <span className="pos-badge" style={{ background: PURPLE }}>{countOcc}</span>}
+    </div>
+  );
   const KitchenButton = () => (
     <div className="pos-btn" onClick={goKitchen}>
       <KitchenIcon />
@@ -769,6 +835,7 @@ export function PosPrototype() {
               )}
             </div>
             <div className="pos-header-side">
+              <OrdersButton />
               <KitchenButton />
               <div className="pos-btn" onClick={newOrder} style={{ background: PURPLE, color: "#fff", border: "none", fontWeight: 700, padding: "10px 16px" }}>
                 <PlusIcon />
@@ -862,6 +929,7 @@ export function PosPrototype() {
               <div className="pos-header-sub">{at.walkin ? "Losse order" : (at.guests || at.seats) + " gasten"}</div>
             </div>
             <div className="pos-header-side">
+              <OrdersButton />
               <KitchenButton />
               <Avatar />
             </div>
@@ -1035,66 +1103,122 @@ export function PosPrototype() {
           <div className="pos-header">
             <div className="pos-header-side">
               <BackBtn />
-              <div className="pos-header-title">Open orders</div>
-              <div className="pos-header-sub">{occ.length + " openstaande tafels"}</div>
+              <div className="pos-header-title">Orders</div>
+              <div className="pos-header-sub">{s.ordersTab === "open" ? occ.length + " openstaand" : s.closedOrders.length + " afgerekend vandaag"}</div>
             </div>
             <div className="pos-header-side">
               <KitchenButton />
               <Avatar />
             </div>
           </div>
-          <div style={{ flex: 1, overflow: "auto", padding: "18px 28px 28px", minHeight: 0 }}>
-            {occ.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto" }}>
-                {openOrders.map(({ t, m, wc, ic, lbl, todo, exp }) => (
-                  <div key={t.id} className="pos-oo-row" style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
-                    <div onClick={() => setExpand(t.id, !exp)} style={{ display: "flex", alignItems: "center", gap: 18, padding: "15px 18px", cursor: "pointer" }}>
-                      <div style={{ width: 50, height: 50, borderRadius: 12, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, flexShrink: 0 }}>{t.walkin ? (t.name || "?").slice(0, 2) : t.label}</div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#101828" }}>{lbl}</div>
-                        <div style={{ fontSize: 13, color: "#667085" }}>{(t.walkin ? "Losse order" : (t.area === "bar" ? "Bar" : "Terras") + " · " + (t.guests || t.seats) + " gasten") + " · " + ic + " items"}</div>
-                      </div>
-                      <div className="pos-oo-wait" style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 999, fontSize: 13, fontWeight: 700, ...wc }}>
-                        <ClockIcon />
-                        <span>{m < 1 ? "< 1 min" : m + " min"}</span>
-                      </div>
-                      <div style={{ fontSize: 17, fontWeight: 800, color: "#101828", width: 86, textAlign: "right" }}>{fmt(tableTotal(t))}</div>
-                      <span style={{ display: "inline-block", transition: "transform .15s", transform: exp ? "rotate(90deg)" : "rotate(0deg)", fontSize: 22, color: "#D0D5DD", fontWeight: 600 }}>{"›"}</span>
-                    </div>
-                    {exp && (
-                      <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "6px 18px 12px" }}>
-                        {todo.length > 0 ? (
-                          todo.map((td, i) => (
-                            <div key={i} onClick={() => markDelivered(td.ticketId, td.name)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 2px", borderBottom: "1px solid #F2F4F7", cursor: "pointer" }}>
-                              <div style={{ width: 24, height: 24, borderRadius: 7, border: "2px solid #D0D5DD", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#D0D5DD" }}>
-                                <CheckIcon size={14} />
-                              </div>
-                              <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 28 }}>{td.qtyText}</span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{td.name}</span>
-                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, ...(td.station === "bar" ? { background: "#FEF0C7", color: "#B54708" } : { background: "#F4EBFF", color: "#6941C6" }) }}>{td.station === "bar" ? "Bar" : "Keuken"}</span>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 2px", fontSize: 14, fontWeight: 600, color: "#12B76A" }}>
-                            <CheckIcon size={16} />
-                            Alles geleverd
-                          </div>
-                        )}
-                        <div onClick={() => patch({ activeTableId: t.id, screen: "order" })} className="pos-hover-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, height: 42, borderRadius: 11, background: "#fff", border: "1px solid #E4E7EC", color: "#475467", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Open volledige bestelling ›</div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 360, textAlign: "center", color: "#98A2B3" }}>
-                <div style={{ width: 56, height: 56, borderRadius: 16, background: "#F2F4F7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                  <OrdersIcon stroke="#98A2B3" />
+
+          <div style={{ flexShrink: 0, padding: "14px 28px 0", display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto", width: "100%" }}>
+            <div style={{ display: "flex", borderBottom: "1px solid #EAECF0" }}>
+              {([
+                { k: "open", label: "Open", count: occ.length },
+                { k: "closed", label: "Afgerekend", count: s.closedOrders.length },
+              ] as const).map((tab) => {
+                const on = s.ordersTab === tab.k;
+                return (
+                  <button
+                    key={tab.k}
+                    onClick={() => patch({ ordersTab: tab.k })}
+                    style={{ background: "transparent", border: 0, padding: "10px 16px", marginBottom: -1, display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600, color: on ? PURPLE : "#667085", borderBottom: "2px solid " + (on ? PURPLE : "transparent"), cursor: "pointer" }}
+                  >
+                    {tab.label}
+                    <span style={{ background: on ? "#F4EBFF" : "#F2F4F7", color: on ? "#6941C6" : "#667085", fontSize: 11, fontWeight: 700, padding: "1px 8px", borderRadius: 999 }}>{tab.count}</span>
+                  </button>
+                );
+              })}
+              {s.ordersTab === "closed" && (
+                <div style={{ marginLeft: "auto", padding: "4px 0 8px", display: "flex", alignItems: "center", gap: 8 }}>
+                  <input
+                    value={s.ordersQuery}
+                    onChange={(e) => patch({ ordersQuery: e.target.value })}
+                    placeholder="Zoek tafel of naam…"
+                    style={{ height: 34, border: "1px solid #E4E7EC", borderRadius: 8, padding: "0 12px", fontSize: 13.5, color: "#101828", outline: "none", width: 220, background: "#fff" }}
+                  />
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: "#475467" }}>Geen openstaande orders</div>
-                <div style={{ fontSize: 13, marginTop: 4 }}>Alle tafels zijn vrij of afgerekend.</div>
-              </div>
-            )}
+              )}
+            </div>
+          </div>
+
+          <div style={{ flex: 1, overflow: "auto", padding: "16px 28px 28px", minHeight: 0 }}>
+            {s.ordersTab === "open" ? (
+              occ.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto" }}>
+                  {openOrders.map(({ t, m, wc, ic, lbl, todo, exp }) => (
+                    <div key={t.id} className="pos-oo-row" style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
+                      <div onClick={() => setExpand(t.id, !exp)} style={{ display: "flex", alignItems: "center", gap: 18, padding: "15px 18px", cursor: "pointer" }}>
+                        <div style={{ width: 50, height: 50, borderRadius: 12, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, flexShrink: 0 }}>{t.walkin ? (t.name || "?").slice(0, 2) : t.label}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "#101828" }}>{lbl}</div>
+                          <div style={{ fontSize: 13, color: "#667085" }}>{(t.walkin ? "Losse order" : (t.area === "bar" ? "Bar" : "Terras") + " · " + (t.guests || t.seats) + " gasten") + " · " + ic + " items"}</div>
+                        </div>
+                        <div className="pos-oo-wait" style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 999, fontSize: 13, fontWeight: 700, ...wc }}>
+                          <ClockIcon />
+                          <span>{m < 1 ? "< 1 min" : m + " min"}</span>
+                        </div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: "#101828", width: 86, textAlign: "right" }}>{fmt(tableTotal(t))}</div>
+                        <span style={{ display: "inline-block", transition: "transform .15s", transform: exp ? "rotate(90deg)" : "rotate(0deg)", fontSize: 22, color: "#D0D5DD", fontWeight: 600 }}>{"›"}</span>
+                      </div>
+                      {exp && (
+                        <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "6px 18px 12px" }}>
+                          {todo.length > 0 ? (
+                            todo.map((td, i) => (
+                              <div key={i} onClick={() => markDelivered(td.ticketId, td.name)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 2px", borderBottom: "1px solid #F2F4F7", cursor: "pointer" }}>
+                                <div style={{ width: 24, height: 24, borderRadius: 7, border: "2px solid #D0D5DD", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#D0D5DD" }}>
+                                  <CheckIcon size={14} />
+                                </div>
+                                <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 28 }}>{td.qtyText}</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{td.name}</span>
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, ...(td.station === "bar" ? { background: "#FEF0C7", color: "#B54708" } : { background: "#F4EBFF", color: "#6941C6" }) }}>{td.station === "bar" ? "Bar" : "Keuken"}</span>
+                              </div>
+                            ))
+                          ) : (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 2px", fontSize: 14, fontWeight: 600, color: "#12B76A" }}>
+                              <CheckIcon size={16} />
+                              Alles geleverd
+                            </div>
+                          )}
+                          <div onClick={() => patch({ activeTableId: t.id, screen: "order" })} className="pos-hover-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, height: 42, borderRadius: 11, background: "#fff", border: "1px solid #E4E7EC", color: "#475467", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Open volledige bestelling ›</div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyOrders title="Geen openstaande orders" sub="Alle tafels zijn vrij of afgerekend." />
+              )
+            ) : (() => {
+              const q = s.ordersQuery.trim().toLowerCase();
+              const filtered = s.closedOrders.filter((c) => !q || c.label.toLowerCase().includes(q));
+              if (!filtered.length) return <EmptyOrders title={q ? "Geen resultaten" : "Nog niets afgerekend"} sub={q ? "Pas je zoekopdracht aan." : "Afgerekende orders verschijnen hier."} />;
+              return (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 940, margin: "0 auto" }}>
+                  {filtered.map((c) => {
+                    const m = Math.floor((s.now - c.paidAt) / 60000);
+                    const timeText = m < 1 ? "zojuist" : m < 60 ? m + " min geleden" : Math.floor(m / 60) + "u" + (m % 60 ? " " + (m % 60) + "m" : "") + " geleden";
+                    return (
+                      <div key={c.id} onClick={() => patch({ selectedClosedId: c.id })} className="pos-oo-row" style={{ display: "flex", alignItems: "center", gap: 16, background: "#fff", border: "1px solid #EAECF0", borderRadius: 14, padding: "13px 16px", cursor: "pointer", boxShadow: "0 1px 2px rgba(16,24,40,0.03)" }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 11, background: "#ECFDF3", color: "#067647", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <CheckIcon size={20} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{c.label}</div>
+                          <div style={{ fontSize: 12.5, color: "#667085" }}>{timeText} · {c.lines.reduce((a, l) => a + l.qty, 0)} items · {paymentLabel(c.payment)}</div>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: "#101828", width: 86, textAlign: "right" }}>{fmt(c.total)}</div>
+                        <div onClick={(e) => { e.stopPropagation(); setToast("Bon herprint · " + c.label); }} className="pos-icon-btn pos-hover-row" title="Bon herprinten" style={{ border: "1px solid #E4E7EC" }}>
+                          <PrintIcon />
+                        </div>
+                        <span style={{ fontSize: 22, color: "#D0D5DD", fontWeight: 600 }}>{"›"}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -1173,7 +1297,7 @@ export function PosPrototype() {
           base={subtotal}
           label={tlabel(at)}
           onClose={() => patch({ showCheckout: false })}
-          onComplete={(grand) => finalizePaid(grand)}
+          onComplete={(grand, breakdown) => finalizePaid(grand, breakdown)}
         />
       )}
 
@@ -1241,6 +1365,81 @@ export function PosPrototype() {
                 ))}
               </div>
               <div onClick={() => patch({ cancelOid: null })} style={{ marginTop: 14, height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#667085" }}>Sluiten</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Closed-order detail (reprint, mutation) ───── */}
+      {s.selectedClosedId && (() => {
+        const co = s.closedOrders.find((c) => c.id === s.selectedClosedId);
+        if (!co) return null;
+        const close = () => patch({ selectedClosedId: null });
+        const reprint = () => { close(); setToast("Bon herprint · " + co.label); };
+        const addCorrection = () => {
+          // Tebi pattern: a closed order can't be reopened, but you can add a
+          // correction order on top. Spin up a walk-in pre-named with the source,
+          // so the user lands in the order screen with a fresh ticket.
+          const id = "w" + Date.now();
+          const wt: TableT = { id, walkin: true, name: "Correctie · " + co.label, label: "", seats: 0, guests: 0, status: "free", orders: [], openedAt: null };
+          setCartSheetOpen(false);
+          patch((st) => ({ tables: st.tables.concat([wt]), activeTableId: id, screen: "order", editingOid: null, selectedClosedId: null }));
+          setToast("Correctie-order geopend voor " + co.label);
+        };
+        const paidDate = new Date(co.paidAt);
+        const paidTime = String(paidDate.getHours()).padStart(2, "0") + ":" + String(paidDate.getMinutes()).padStart(2, "0");
+        const itemCount = co.lines.reduce((a, l) => a + l.qty, 0);
+        return (
+          <div style={overlay(0.45, 58)} onClick={close}>
+            <div onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 4 }}>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{co.label}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#067647", background: "#ECFDF3", padding: "3px 10px", borderRadius: 999 }}>Afgerekend</div>
+              </div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>{paidTime} · {paymentLabel(co.payment)} · {itemCount} items</div>
+
+              <div style={{ background: "#FAFAFB", border: "1px solid #EAECF0", borderRadius: 14, padding: "14px 16px", marginBottom: 18 }}>
+                {co.lines.filter((l) => l.qty > 0).map((l, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", fontSize: 14 }}>
+                    <span style={{ width: 26, fontWeight: 700, color: "#101828" }}>{l.qty}×</span>
+                    <span style={{ flex: 1, color: "#344054" }}>{l.name}</span>
+                    <span style={{ fontWeight: 600, color: "#475467" }}>{fmt(l.qty * l.price)}</span>
+                  </div>
+                ))}
+                <div style={{ height: 1, background: "#EAECF0", margin: "8px 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#667085" }}>
+                  <span>Subtotaal</span>
+                  <span style={{ fontWeight: 600, color: "#475467" }}>{fmt(co.subtotal)}</span>
+                </div>
+                {co.discount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#667085", marginTop: 2 }}>
+                    <span>Korting</span>
+                    <span style={{ fontWeight: 600, color: "#067647" }}>− {fmt(co.discount)}</span>
+                  </div>
+                )}
+                {co.tip > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#667085", marginTop: 2 }}>
+                    <span>Fooi</span>
+                    <span style={{ fontWeight: 600, color: "#475467" }}>{fmt(co.tip)}</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>Totaal</span>
+                  <span style={{ fontSize: 18, fontWeight: 800, color: "#101828" }}>{fmt(co.total)}</span>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10 }}>
+                <div onClick={reprint} className="pos-hover-row" style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+                  <PrintIcon />
+                  Bon herprinten
+                </div>
+                <div onClick={addCorrection} style={{ flex: 1, height: 52, borderRadius: 13, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+                  <PencilIcon />
+                  Wijziging
+                </div>
+              </div>
+              <div onClick={close} style={{ marginTop: 10, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#667085" }}>Sluiten</div>
             </div>
           </div>
         );
@@ -1379,7 +1578,7 @@ function DayReport({ staffName, staffInitial, onBack }: { staffName: string; sta
 }
 
 // ── Checkout flow ──
-function Checkout({ base, label, onClose, onComplete }: { base: number; label: string; onClose: () => void; onComplete: (grand: number) => void }) {
+function Checkout({ base, label, onClose, onComplete }: { base: number; label: string; onClose: () => void; onComplete: (grand: number, breakdown: { subtotal: number; tip: number; discount: number; payment: string }) => void }) {
   const [disc, setDisc] = useState<"none" | "p10" | "custom">("none");
   const [discCustom, setDiscCustom] = useState("");
   const [tip, setTip] = useState<"none" | "p5" | "p10" | "custom">("none");
@@ -1415,7 +1614,7 @@ function Checkout({ base, label, onClose, onComplete }: { base: number; label: s
   };
   const chooseReceipt = () => {
     setPhase("done");
-    setTimeout(() => onComplete(grand), 1200);
+    setTimeout(() => onComplete(grand, { subtotal: base, tip: tipAmt, discount, payment: method || "pin" }), 1200);
   };
 
   const Seg = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) => (
@@ -1563,6 +1762,22 @@ function AmountInput({ value, onChange, placeholder }: { value: string; onChange
 }
 
 // ── Small presentational helpers ──
+function EmptyOrders({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 360, textAlign: "center", color: "#98A2B3" }}>
+      <div style={{ width: 56, height: 56, borderRadius: 16, background: "#F2F4F7", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+        <OrdersIcon stroke="#98A2B3" />
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: "#475467" }}>{title}</div>
+      <div style={{ fontSize: 13, marginTop: 4 }}>{sub}</div>
+    </div>
+  );
+}
+
+function paymentLabel(k: string): string {
+  return k === "pin" ? "Pinnen" : k === "cash" ? "Contant" : k === "account" ? "Op rekening" : k;
+}
+
 function Legend({ dot, text }: { dot: ReactNode; text: string }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 600, color: "#475467" }}>
