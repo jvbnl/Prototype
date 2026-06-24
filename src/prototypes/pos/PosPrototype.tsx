@@ -66,7 +66,6 @@ interface PosState {
   startCounts: CashCounts;
   endCounts: CashCounts;
   activeTableId: string | null;
-  popoverId: string | null;
   showReserve: boolean;
   reserveTableId: string | null;
   resName: string;
@@ -209,7 +208,6 @@ function makeInitialState(): PosState {
     startCounts: { "50": 1, "20": 2, "10": 1 }, // tidy €100 opening float
     endCounts: {},
     activeTableId: null,
-    popoverId: null,
     showReserve: false,
     reserveTableId: null,
     resName: "",
@@ -550,29 +548,19 @@ export function PosPrototype() {
   };
 
   // ── Table tap / reserve ──
+  // Tap on any table goes straight to the order screen — no popover. For a
+  // free/reserved table we claim default guests (= seats) on the way in.
   const tapTable = (t: TableT) => {
-    if (t.status === "occupied") patch({ activeTableId: t.id, screen: "order" });
-    else patch({ popoverId: t.id });
-  };
-  const popClose = () => patch({ popoverId: null });
-  const popOpenOrder = () => {
-    const id = s.popoverId!;
     patch((st) => ({
       tables: st.tables.map((x) => {
-        if (x.id !== id) return x;
+        if (x.id !== t.id) return x;
         const nx = { ...x };
         if (!nx.guests) nx.guests = nx.seats;
         return nx;
       }),
-      activeTableId: id,
+      activeTableId: t.id,
       screen: "order",
-      popoverId: null,
     }));
-  };
-  const popReserve = () => {
-    const id = s.popoverId!;
-    const t = findTable(id);
-    patch({ showReserve: true, reserveTableId: id, resName: t && t.status === "reserved" ? t.resName || "" : "", resGuests: t ? t.seats : 2, resTime: "19:30", popoverId: null });
   };
   const resConfirm = () => {
     if (!s.resName.trim()) return;
@@ -608,22 +596,6 @@ export function PosPrototype() {
       });
       return { ...t, orders: out };
     });
-  // Delivered (already-served) line edit — adjusts the order only, no ticket
-  const adjustOrderQty = (oid: string, delta: number) => {
-    let removed = false;
-    updateTable(s.activeTableId!, (t) => {
-      const orders = t.orders || [];
-      const it = orders.find((o) => o.oid === oid);
-      if (!it) return t;
-      const nq = it.qty + delta;
-      if (nq <= 0) {
-        removed = true;
-        return { ...t, orders: orders.filter((o) => o.oid !== oid) };
-      }
-      return { ...t, orders: orders.map((o) => (o.oid === oid ? { ...o, qty: nq } : o)) };
-    });
-    if (removed) patch({ editingOid: null });
-  };
   // In-preparation line edit — keeps the kitchen ticket in sync
   const removeSentLine = (oid: string) => {
     const t = findTable(s.activeTableId);
@@ -810,12 +782,8 @@ export function PosPrototype() {
   const hasItems = orders.length > 0;
   const hasUnsent = orders.some((o) => !o.sent);
   const itemCount = orders.reduce((a, o) => a + o.qty, 0);
-  const ticketLbl = tlabel(at);
-  const hasTicketItem = (nm: string) => s.tickets.some((k) => k.table === ticketLbl && k.items.some((it) => it.name === nm));
-  const openSrc = orders.filter((o) => o.sent && hasTicketItem(o.name));
-  const deliveredSrc = orders.filter((o) => o.sent && !hasTicketItem(o.name));
+  const sentSrc = orders.filter((o) => o.sent);
   const newSrc = orders.filter((o) => !o.sent);
-  const openMin = Math.floor((s.now - (at.openedAt || s.now)) / 60000);
 
   // Auto-scroll the bill to the bottom when a line is added / on entering order
   useEffect(() => {
@@ -902,12 +870,10 @@ export function PosPrototype() {
     </div>
   );
 
-  function BillLine({ o, kind }: { o: OrderLine; kind: "delivered" | "open" }) {
+  function BillLine({ o }: { o: OrderLine }) {
     const editing = s.editingOid === o.oid;
-    const onDec = () => (kind === "open" ? adjustSentQty(o.oid, -1) : adjustOrderQty(o.oid, -1));
-    const onInc = () => (kind === "open" ? adjustSentQty(o.oid, 1) : adjustOrderQty(o.oid, 1));
-    const badge = kind === "open" ? { background: "#ECFDF3", color: "#12B76A" } : { background: "#F2F4F7", color: "#98A2B3" };
-    const txt = kind === "open" ? "#475467" : "#98A2B3";
+    const onDec = () => adjustSentQty(o.oid, -1);
+    const onInc = () => adjustSentQty(o.oid, 1);
     if (!editing)
       // Tap-the-whole-row to edit — standard touch POS pattern (Square /
       // Lightspeed / Toast all use this; no separate small pencil button).
@@ -917,9 +883,9 @@ export function PosPrototype() {
           className="pos-bill-line"
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", margin: "0 -8px", borderRadius: 10, borderBottom: "1px solid #F7F8FA", cursor: "pointer", minHeight: 56 }}
         >
-          <div style={{ width: 32, height: 32, borderRadius: 8, ...badge, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: txt }}>{o.name}</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: txt }}>{fmt(o.price * o.qty)}</div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F2F4F7", color: "#98A2B3", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: "#98A2B3" }}>{o.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#98A2B3" }}>{fmt(o.price * o.qty)}</div>
         </div>
       );
     return (
@@ -1151,26 +1117,13 @@ export function PosPrototype() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6941C6", background: "#F4EBFF", padding: "5px 11px", borderRadius: 999 }}>{at.status === "occupied" ? "Lopende rekening" : "Nieuwe bestelling"}</div>
               </div>
               <div ref={billRef} style={{ flex: 1, overflow: "auto", padding: "6px 22px" }}>
-                {deliveredSrc.length > 0 && (
+                {sentSrc.length > 0 && (
                   <>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0 12px", color: "#98A2B3", fontSize: 12, fontWeight: 600 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0 10px", color: "#98A2B3", fontSize: 12, fontWeight: 600 }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
                       Eerdere orders
                     </div>
-                    {deliveredSrc.map((o) => <BillLine key={o.oid} o={o} kind="delivered" />)}
-                    <div style={{ height: 1, background: "#EAECF0", margin: "10px 0 2px" }} />
-                  </>
-                )}
-                {openSrc.length > 0 && (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#F79009", textTransform: "uppercase", letterSpacing: "0.04em" }}>In bereiding</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#98A2B3" }}>
-                        <ClockIcon size={13} />
-                        {openMin < 1 ? "< 1 min" : openMin + " min"}
-                      </span>
-                    </div>
-                    {openSrc.map((o) => <BillLine key={o.oid} o={o} kind="open" />)}
+                    {sentSrc.map((o) => <BillLine key={o.oid} o={o} />)}
                   </>
                 )}
                 {newSrc.length > 0 && (
@@ -1476,33 +1429,6 @@ export function PosPrototype() {
                 </div>
                 <div onClick={confirmEnd} style={{ height: 54, borderRadius: 14, background: "#1D1B52", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Dienst afsluiten</div>
               </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ───── Table popover ───── */}
-      {s.popoverId != null && s.screen === "floor" && (() => {
-        const pt = findTable(s.popoverId) || ({ label: "", seats: 0, status: "free", resName: "", resTime: "" } as TableT);
-        const reserved = pt.status === "reserved";
-        return (
-          <div style={overlay(0.4, 50)} onClick={popClose}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 400, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 22, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Tafel {pt.label}</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 20 }}>{pt.seats} personen</div>
-              {reserved && (
-                <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#FFFBF4", border: "1px solid #FEDF89", borderRadius: 14, padding: "12px 14px", marginBottom: 18 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#FEF0C7", color: "#B54708", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>{(pt.resName || "?")[0]}</div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#B54708" }}>{pt.resName}</div>
-                    <div style={{ fontSize: 12, color: "#B54708" }}>Gereserveerd · {pt.resTime}</div>
-                  </div>
-                </div>
-              )}
-              <div onClick={popOpenOrder} style={{ height: 54, borderRadius: 14, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>{reserved ? "Tafel openen" : "Bestelling openen"}</div>
-              {!reserved && (
-                <div onClick={popReserve} style={{ height: 54, borderRadius: 14, background: "#fff", border: "1.5px solid #E4E7EC", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Reserveren op naam</div>
-              )}
             </div>
           </div>
         );
