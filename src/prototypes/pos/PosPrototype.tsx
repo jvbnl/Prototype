@@ -761,7 +761,13 @@ export function PosPrototype() {
       {s.screen === "floor" && (
         <div className="pos-screen">
           <div className="pos-header">
-            <div className="pos-header-side" style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em" }}>{locationName}</div>
+            <div className="pos-header-side" style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em" }}>
+              {locationName === "Tree 11 Bar" ? (
+                <img src="/prototypes/pos/location-logo.svg" alt="Tree 11 Bar" style={{ height: 30, width: "auto", display: "block" }} />
+              ) : (
+                locationName
+              )}
+            </div>
             <div className="pos-header-side">
               <KitchenButton />
               <div className="pos-btn" onClick={newOrder} style={{ background: PURPLE, color: "#fff", border: "none", fontWeight: 700, padding: "10px 16px" }}>
