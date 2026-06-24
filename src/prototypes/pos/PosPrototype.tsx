@@ -451,6 +451,11 @@ export function PosPrototype() {
 
   const [locationName, setLocationName] = useState("Tree 11 Bar");
   const [staffName, setStaffName] = useState("Joel");
+  // Two operating modes: a "table" service POS (default; floor plan, tafel-
+  // acties), and a "counter" / quick-service variant for take-away counters
+  // where there are no tables — every order is a fresh walk-in.
+  const [posMode, setPosMode] = useState<"table" | "counter">("table");
+  const [counterSeq, setCounterSeq] = useState(0);
   const [s, setS] = useState<PosState>(makeInitialState);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -495,8 +500,24 @@ export function PosPrototype() {
   const goKitchen = () => patch({ screen: "kitchen", showUserMenu: false });
   const goOrders = () => patch({ screen: "orders", showUserMenu: false });
   const goDay = () => patch({ screen: "day", showUserMenu: false });
+  // Counter-mode helper: each new order is a fresh walk-in with an auto
+  // number ("Order #N"). After submit / pay / close we open the next one.
+  const startNewCounterOrder = () => {
+    const next = counterSeq + 1;
+    setCounterSeq(next);
+    const id = "w" + Date.now() + Math.random().toString(36).slice(2, 6);
+    const wt: TableT = { id, walkin: true, name: "Order #" + next, label: "", seats: 0, guests: 0, status: "free", orders: [], openedAt: null };
+    setCartSheetOpen(false);
+    patch((st) => ({ tables: st.tables.concat([wt]), activeTableId: id, screen: "order", editingOid: null }));
+  };
+
+  // In counter mode there is no floor to go back to — start the next order.
   const backToFloor = () => {
     setCartSheetOpen(false);
+    if (posMode === "counter") {
+      startNewCounterOrder();
+      return;
+    }
     patch({ screen: "floor", activeTableId: null, editingOid: null });
   };
   const jumpTo = (key: string) => {
@@ -515,6 +536,7 @@ export function PosPrototype() {
     const nm = s.pinUser || s.activeStaff;
     setCartSheetOpen(false);
     patch({ shiftOpen: true, activeStaff: nm, screen: "floor", pinUser: null, pinValue: "" });
+    if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     setToast("Dienst gestart · " + nm);
   };
   const setEndCount = (key: string, n: number) => patch((st) => ({ endCounts: { ...st.endCounts, [key]: n } }));
@@ -755,6 +777,7 @@ export function PosPrototype() {
     const newTickets: Ticket[] = stationKeys.map((st, i) => ({ id: "k" + Date.now() + i, table: lbl, items: groups[st], status: "new", station: st as Station, createdAt: Date.now() }));
     patch((st) => ({ tickets: st.tickets.concat(newTickets), screen: "floor", activeTableId: null, editingOid: null }));
     setCartSheetOpen(false);
+    if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     const dest = stationKeys.length > 1 ? "keuken & bar" : stationKeys[0] === "bar" ? "de bar" : "de keuken";
     setToast("Doorgestuurd naar " + dest);
   };
@@ -899,6 +922,7 @@ export function PosPrototype() {
     if (isWalk) patch((st) => ({ tables: st.tables.filter((x) => x.id !== id) }));
     else updateTable(t.id, (tt) => ({ ...tt, status: "free", orders: [], guests: 0, resName: "", resTime: "", openedAt: null }));
     patch((st) => ({ tickets: st.tickets.filter((k) => k.table !== lbl), showCheckout: false, activeTableId: null, screen: "floor" }));
+    if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     setToast(lbl + " afgerekend · " + fmt(grand));
   };
 
@@ -961,10 +985,12 @@ export function PosPrototype() {
   function finalizeSimpleClose() {
     const t = findTable(s.activeTableId);
     const lbl = t ? tlabel(t) : "";
-    if (t) updateTable(t.id, (tt) => ({ ...tt, status: "free", orders: [], guests: 0, resName: "", resTime: "", openedAt: null }));
+    if (t && t.walkin) patch((st) => ({ tables: st.tables.filter((x) => x.id !== t.id) }));
+    else if (t) updateTable(t.id, (tt) => ({ ...tt, status: "free", orders: [], guests: 0, resName: "", resTime: "", openedAt: null }));
     setCartSheetOpen(false);
     patch((st) => ({ tickets: st.tickets.filter((k) => k.table !== lbl), activeTableId: null, screen: "floor" }));
-    setToast((t && t.label ? "Tafel " + t.label : lbl) + " gesloten");
+    if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
+    setToast(lbl + " gesloten");
   }
 
   // floor walk-in cards + open-order count
@@ -1848,18 +1874,22 @@ export function PosPrototype() {
                   onClick={openNoteModal}
                 />
               </div>
-              <ActionRow
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5" /></svg>}
-                label="Tafel verplaatsen"
-                sub="Naar een vrije tafel"
-                onClick={openMoveModal}
-              />
-              <ActionRow
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v7l-3 3M17 4v7l3 3M7 14h10M12 14v6" /></svg>}
-                label="Tafels samenvoegen"
-                sub="Voeg deze toe aan een andere bezette tafel"
-                onClick={openMergeModal}
-              />
+              {posMode === "table" && (
+                <>
+                  <ActionRow
+                    icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5" /></svg>}
+                    label="Tafel verplaatsen"
+                    sub="Naar een vrije tafel"
+                    onClick={openMoveModal}
+                  />
+                  <ActionRow
+                    icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v7l-3 3M17 4v7l3 3M7 14h10M12 14v6" /></svg>}
+                    label="Tafels samenvoegen"
+                    sub="Voeg deze toe aan een andere bezette tafel"
+                    onClick={openMergeModal}
+                  />
+                </>
+              )}
               <ActionRow
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2.2" /><circle cx="16" cy="16" r="2.2" /><path d="M19 5 5 19" /></svg>}
                 label={hasDiscount ? `Korting · ${s.tableDiscount[at.id]}%` : "Korting toevoegen"}
@@ -2007,7 +2037,26 @@ export function PosPrototype() {
         setLocationName={setLocationName}
         staffName={staffName}
         setStaffName={setStaffName}
-        onReset={() => { setS(makeInitialState()); setCartSheetOpen(false); setToast("Demo gereset"); }}
+        posMode={posMode}
+        setPosMode={(m) => {
+          setPosMode(m);
+          setCounterSeq(0);
+          setCartSheetOpen(false);
+          if (m === "counter") {
+            // Open a fresh counter order immediately so the operator lands in
+            // the order flow — no table grid to navigate.
+            const next = 1;
+            setCounterSeq(next);
+            const id = "w" + Date.now() + Math.random().toString(36).slice(2, 6);
+            const wt: TableT = { id, walkin: true, name: "Order #" + next, label: "", seats: 0, guests: 0, status: "free", orders: [], openedAt: null };
+            patch((st) => ({ tables: st.tables.concat([wt]), activeTableId: id, screen: "order", editingOid: null, shiftOpen: true }));
+            setToast("Counter-modus actief");
+          } else {
+            patch({ screen: "floor", activeTableId: null, editingOid: null });
+            setToast("Tafel-modus actief");
+          }
+        }}
+        onReset={() => { setS(makeInitialState()); setCartSheetOpen(false); setCounterSeq(0); setToast("Demo gereset"); }}
       />
     </div>
   );
@@ -2430,6 +2479,8 @@ function PosTweaks({
   setLocationName,
   staffName,
   setStaffName,
+  posMode,
+  setPosMode,
   onReset,
 }: {
   screen: Screen;
@@ -2438,6 +2489,8 @@ function PosTweaks({
   setLocationName: (v: string) => void;
   staffName: string;
   setStaffName: (v: string) => void;
+  posMode: "table" | "counter";
+  setPosMode: (m: "table" | "counter") => void;
   onReset: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -2453,6 +2506,13 @@ function PosTweaks({
       </div>
       <div className="pos-twk-body">
         <a className="pos-twk-link" href="#/">← All prototypes</a>
+
+        <div className="pos-twk-sect">Modus</div>
+        <div className="pos-twk-seg">
+          {([["table", "Tafels"], ["counter", "Counter"]] as const).map(([k, label]) => (
+            <button key={k} className={posMode === k ? "on" : ""} onClick={() => setPosMode(k)}>{label}</button>
+          ))}
+        </div>
 
         <div className="pos-twk-sect">Scherm</div>
         <div className="pos-twk-seg">
