@@ -66,12 +66,12 @@ interface PosState {
   startCounts: CashCounts;
   endCounts: CashCounts;
   activeTableId: string | null;
-  popoverId: string | null;
   showReserve: boolean;
-  reserveTableId: string | null;
-  resName: string;
-  resGuests: number;
-  resTime: string;
+  rmName: string;
+  rmGuests: number;
+  rmTime: string;
+  rmArea: Area;
+  rmTables: string[];
   activeCat: string;
   showCheckout: boolean;
   toast: string | null;
@@ -209,12 +209,12 @@ function makeInitialState(): PosState {
     startCounts: { "50": 1, "20": 2, "10": 1 }, // tidy €100 opening float
     endCounts: {},
     activeTableId: null,
-    popoverId: null,
     showReserve: false,
-    reserveTableId: null,
-    resName: "",
-    resGuests: 2,
-    resTime: "19:30",
+    rmName: "",
+    rmGuests: 2,
+    rmTime: "19:30",
+    rmArea: "bar",
+    rmTables: [],
     activeCat: "alles",
     showCheckout: false,
     toast: null,
@@ -550,40 +550,48 @@ export function PosPrototype() {
   };
 
   // ── Table tap / reserve ──
+  // Tap on any table goes straight to the order screen — no popover. For a
+  // free/reserved table we claim default guests (= seats) on the way in.
   const tapTable = (t: TableT) => {
-    if (t.status === "occupied") patch({ activeTableId: t.id, screen: "order" });
-    else patch({ popoverId: t.id });
-  };
-  const popClose = () => patch({ popoverId: null });
-  const popOpenOrder = () => {
-    const id = s.popoverId!;
     patch((st) => ({
       tables: st.tables.map((x) => {
-        if (x.id !== id) return x;
+        if (x.id !== t.id) return x;
         const nx = { ...x };
         if (!nx.guests) nx.guests = nx.seats;
         return nx;
       }),
-      activeTableId: id,
+      activeTableId: t.id,
       screen: "order",
-      popoverId: null,
     }));
   };
-  const popReserve = () => {
-    const id = s.popoverId!;
-    const t = findTable(id);
-    patch({ showReserve: true, reserveTableId: id, resName: t && t.status === "reserved" ? t.resName || "" : "", resGuests: t ? t.seats : 2, resTime: "19:30", popoverId: null });
-  };
-  const resConfirm = () => {
-    if (!s.resName.trim()) return;
-    const id = s.reserveTableId!;
-    const nm = s.resName.trim();
-    const g = s.resGuests;
-    const tm = s.resTime;
-    const lbl = findTable(id)!.label;
-    updateTable(id, (t) => ({ ...t, status: "reserved", resName: nm, resGuests: g, guests: g, resTime: tm }));
-    patch({ showReserve: false });
-    setToast("Tafel " + lbl + " gereserveerd · " + nm);
+  // ── Reservering (global) ──
+  // Opens a richer reserve modal: pick area, time slot, guest count and
+  // optionally one or more specific tables. With no table chosen, the
+  // first free table in the selected area is auto-assigned.
+  const openResModal = () =>
+    patch((st) => ({ showReserve: true, rmName: "", rmGuests: 2, rmTime: "19:30", rmArea: st.rmArea || "bar", rmTables: [] }));
+  const closeResModal = () => patch({ showReserve: false });
+  const rmToggleTable = (id: string) =>
+    patch((st) => ({ rmTables: st.rmTables.includes(id) ? st.rmTables.filter((x) => x !== id) : st.rmTables.concat([id]) }));
+  const rmConfirm = () => {
+    const nm = s.rmName.trim();
+    if (!nm) return;
+    let ids = s.rmTables.slice();
+    if (!ids.length) {
+      const f = s.tables.find((t) => t.area === s.rmArea && t.status === "free");
+      if (f) ids = [f.id];
+    }
+    if (!ids.length) {
+      setToast("Geen vrije tafel in dit gebied");
+      return;
+    }
+    const g = s.rmGuests;
+    const tm = s.rmTime;
+    patch((st) => ({
+      tables: st.tables.map((t) => (ids.includes(t.id) ? { ...t, status: "reserved" as TableStatus, resName: nm, resGuests: g, guests: g, resTime: tm } : t)),
+      showReserve: false,
+    }));
+    setToast("Reservering " + nm + " · " + tm + " · " + g + " pers.");
   };
 
   // ── Order edits ──
@@ -608,22 +616,6 @@ export function PosPrototype() {
       });
       return { ...t, orders: out };
     });
-  // Delivered (already-served) line edit — adjusts the order only, no ticket
-  const adjustOrderQty = (oid: string, delta: number) => {
-    let removed = false;
-    updateTable(s.activeTableId!, (t) => {
-      const orders = t.orders || [];
-      const it = orders.find((o) => o.oid === oid);
-      if (!it) return t;
-      const nq = it.qty + delta;
-      if (nq <= 0) {
-        removed = true;
-        return { ...t, orders: orders.filter((o) => o.oid !== oid) };
-      }
-      return { ...t, orders: orders.map((o) => (o.oid === oid ? { ...o, qty: nq } : o)) };
-    });
-    if (removed) patch({ editingOid: null });
-  };
   // In-preparation line edit — keeps the kitchen ticket in sync
   const removeSentLine = (oid: string) => {
     const t = findTable(s.activeTableId);
@@ -810,12 +802,8 @@ export function PosPrototype() {
   const hasItems = orders.length > 0;
   const hasUnsent = orders.some((o) => !o.sent);
   const itemCount = orders.reduce((a, o) => a + o.qty, 0);
-  const ticketLbl = tlabel(at);
-  const hasTicketItem = (nm: string) => s.tickets.some((k) => k.table === ticketLbl && k.items.some((it) => it.name === nm));
-  const openSrc = orders.filter((o) => o.sent && hasTicketItem(o.name));
-  const deliveredSrc = orders.filter((o) => o.sent && !hasTicketItem(o.name));
+  const sentSrc = orders.filter((o) => o.sent);
   const newSrc = orders.filter((o) => !o.sent);
-  const openMin = Math.floor((s.now - (at.openedAt || s.now)) / 60000);
 
   // Auto-scroll the bill to the bottom when a line is added / on entering order
   useEffect(() => {
@@ -870,15 +858,12 @@ export function PosPrototype() {
       const wc = m >= 30 ? { color: "#B42318", background: "#FEE4E2" } : m >= 15 ? { color: "#B54708", background: "#FEF0C7" } : { color: "#475467", background: "#F2F4F7" };
       const ic = (t.orders || []).reduce((a, o) => a + o.qty, 0);
       const lbl = tlabel(t);
-      const inKitchen = (nm: string) => s.tickets.some((k) => k.table === lbl && k.items.some((it) => it.name === nm));
-      type OrderStatus = "delivered" | "progress" | "new";
-      const lines: { name: string; qty: number; price: number; status: OrderStatus }[] = (t.orders || []).map((o) => ({
+      const lines: { name: string; qty: number; price: number }[] = (t.orders || []).map((o) => ({
         name: o.name,
         qty: o.qty,
         price: o.price,
-        status: !o.sent ? "new" : inKitchen(o.name) ? "progress" : "delivered",
       }));
-      const exp = t.id in s.expandOverrides ? s.expandOverrides[t.id] : m >= 10;
+      const exp = !!s.expandOverrides[t.id];
       return { t, m, wc, ic, lbl, lines, exp };
     })
     .sort((a, b) => b.m - a.m);
@@ -902,12 +887,10 @@ export function PosPrototype() {
     </div>
   );
 
-  function BillLine({ o, kind }: { o: OrderLine; kind: "delivered" | "open" }) {
+  function BillLine({ o }: { o: OrderLine }) {
     const editing = s.editingOid === o.oid;
-    const onDec = () => (kind === "open" ? adjustSentQty(o.oid, -1) : adjustOrderQty(o.oid, -1));
-    const onInc = () => (kind === "open" ? adjustSentQty(o.oid, 1) : adjustOrderQty(o.oid, 1));
-    const badge = kind === "open" ? { background: "#ECFDF3", color: "#12B76A" } : { background: "#F2F4F7", color: "#98A2B3" };
-    const txt = kind === "open" ? "#475467" : "#98A2B3";
+    const onDec = () => adjustSentQty(o.oid, -1);
+    const onInc = () => adjustSentQty(o.oid, 1);
     if (!editing)
       // Tap-the-whole-row to edit — standard touch POS pattern (Square /
       // Lightspeed / Toast all use this; no separate small pencil button).
@@ -917,9 +900,9 @@ export function PosPrototype() {
           className="pos-bill-line"
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", margin: "0 -8px", borderRadius: 10, borderBottom: "1px solid #F7F8FA", cursor: "pointer", minHeight: 56 }}
         >
-          <div style={{ width: 32, height: 32, borderRadius: 8, ...badge, fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: txt }}>{o.name}</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: txt }}>{fmt(o.price * o.qty)}</div>
+          <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F2F4F7", color: "#98A2B3", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: "#98A2B3" }}>{o.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#98A2B3" }}>{fmt(o.price * o.qty)}</div>
         </div>
       );
     return (
@@ -1043,6 +1026,10 @@ export function PosPrototype() {
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#fff", border: "1.5px solid #E4E7EC" }} />} text={`${countFree} vrij`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#F4EBFF", border: "1.5px solid " + PURPLE }} />} text={`${countOcc} bezet`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#FFFBF4", border: "1.5px dashed #F79009" }} />} text={`${countRes} gereserveerd`} />
+              <div onClick={openResModal} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
+                Reserveren
+              </div>
             </div>
           </div>
 
@@ -1151,26 +1138,13 @@ export function PosPrototype() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: "#6941C6", background: "#F4EBFF", padding: "5px 11px", borderRadius: 999 }}>{at.status === "occupied" ? "Lopende rekening" : "Nieuwe bestelling"}</div>
               </div>
               <div ref={billRef} style={{ flex: 1, overflow: "auto", padding: "6px 22px" }}>
-                {deliveredSrc.length > 0 && (
+                {sentSrc.length > 0 && (
                   <>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0 12px", color: "#98A2B3", fontSize: 12, fontWeight: 600 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, padding: "6px 0 10px", color: "#98A2B3", fontSize: 12, fontWeight: 600 }}>
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
                       Eerdere orders
                     </div>
-                    {deliveredSrc.map((o) => <BillLine key={o.oid} o={o} kind="delivered" />)}
-                    <div style={{ height: 1, background: "#EAECF0", margin: "10px 0 2px" }} />
-                  </>
-                )}
-                {openSrc.length > 0 && (
-                  <>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0 4px" }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#F79009", textTransform: "uppercase", letterSpacing: "0.04em" }}>In bereiding</span>
-                      <span style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, fontWeight: 600, color: "#98A2B3" }}>
-                        <ClockIcon size={13} />
-                        {openMin < 1 ? "< 1 min" : openMin + " min"}
-                      </span>
-                    </div>
-                    {openSrc.map((o) => <BillLine key={o.oid} o={o} kind="open" />)}
+                    {sentSrc.map((o) => <BillLine key={o.oid} o={o} />)}
                   </>
                 )}
                 {newSrc.length > 0 && (
@@ -1332,12 +1306,6 @@ export function PosPrototype() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto" }}>
                   {openOrders.map(({ t, m, wc, ic, lbl, lines, exp }) => {
                     const note = s.tableNotes[t.id] || "";
-                    const statusMeta = (st: "delivered" | "progress" | "new") =>
-                      st === "delivered"
-                        ? { label: "Geleverd", color: "#12B76A", bg: "#ECFDF3" }
-                        : st === "progress"
-                        ? { label: "In bereiding", color: "#B54708", bg: "#FEF0C7" }
-                        : { label: "Nieuw", color: "#6941C6", bg: "#F4EBFF" };
                     return (
                     <div key={t.id} className="pos-oo-row" style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
                       <div onClick={() => setExpand(t.id, !exp)} style={{ display: "flex", alignItems: "center", gap: 18, padding: "15px 18px", cursor: "pointer" }}>
@@ -1356,17 +1324,13 @@ export function PosPrototype() {
                       {exp && (
                         <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "10px 18px 14px" }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0 6px" }}>Bestelling</div>
-                          {lines.map((ln, i) => {
-                            const sm = statusMeta(ln.status);
-                            return (
-                              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
-                                <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
-                                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: sm.bg, color: sm.color, whiteSpace: "nowrap" }}>{sm.label}</span>
-                                <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
-                              </div>
-                            );
-                          })}
+                          {lines.map((ln, i) => (
+                            <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
+                              <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
+                              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
+                              <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
+                            </div>
+                          ))}
                           <div style={{ marginTop: 12, display: "flex", alignItems: "flex-start", gap: 10, background: "#fff", border: "1px solid #E4E7EC", borderRadius: 12, padding: "10px 12px" }}>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#98A2B3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: 3, flexShrink: 0 }}>
                               <path d="M4 5h16M4 10h16M4 15h10" />
@@ -1481,65 +1445,76 @@ export function PosPrototype() {
         );
       })()}
 
-      {/* ───── Table popover ───── */}
-      {s.popoverId != null && s.screen === "floor" && (() => {
-        const pt = findTable(s.popoverId) || ({ label: "", seats: 0, status: "free", resName: "", resTime: "" } as TableT);
-        const reserved = pt.status === "reserved";
+      {/* ───── Reserve (global, from floor "Reserveren" button) ───── */}
+      {s.showReserve && (() => {
+        const can = s.rmName.trim().length > 0;
+        const tableOptions = s.tables.filter((t) => t.area === s.rmArea && t.status === "free");
+        const tablesHint = s.rmTables.length
+          ? s.rmTables.length + " tafel(s) gekozen"
+          : "Automatisch toewijzen in " + AREA_LABELS[s.rmArea];
+        const times = ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00"];
         return (
-          <div style={overlay(0.4, 50)} onClick={popClose}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 400, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 22, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Tafel {pt.label}</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 20 }}>{pt.seats} personen</div>
-              {reserved && (
-                <div style={{ display: "flex", alignItems: "center", gap: 11, background: "#FFFBF4", border: "1px solid #FEDF89", borderRadius: 14, padding: "12px 14px", marginBottom: 18 }}>
-                  <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#FEF0C7", color: "#B54708", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, flexShrink: 0 }}>{(pt.resName || "?")[0]}</div>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "#B54708" }}>{pt.resName}</div>
-                    <div style={{ fontSize: 12, color: "#B54708" }}>Gereserveerd · {pt.resTime}</div>
+          <div style={overlay(0.45, 55)} onClick={closeResModal}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 480, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Nieuwe reservering</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 20 }}>Leg een reservering vast voor de zaak.</div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Naam</label>
+              <input value={s.rmName} onChange={(e) => patch({ rmName: e.target.value })} placeholder="Naam van de gast" style={{ width: "100%", height: 50, border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "0 14px", fontSize: 16, color: "#101828", outline: "none", marginBottom: 18 }} />
+              <div style={{ display: "flex", gap: 16, marginBottom: 18 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Aantal personen</label>
+                  <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 50, overflow: "hidden" }}>
+                    <div onClick={() => patch((st) => ({ rmGuests: Math.max(1, st.rmGuests - 1) }))} style={{ width: 48, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
+                    <div style={{ flex: 1, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{s.rmGuests}</div>
+                    <div onClick={() => patch((st) => ({ rmGuests: Math.min(20, st.rmGuests + 1) }))} style={{ width: 48, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer", userSelect: "none" }}>+</div>
                   </div>
                 </div>
-              )}
-              <div onClick={popOpenOrder} style={{ height: 54, borderRadius: 14, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer", marginBottom: 10 }}>{reserved ? "Tafel openen" : "Bestelling openen"}</div>
-              {!reserved && (
-                <div onClick={popReserve} style={{ height: 54, borderRadius: 14, background: "#fff", border: "1.5px solid #E4E7EC", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Reserveren op naam</div>
-              )}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ───── Reserve ───── */}
-      {s.showReserve && (() => {
-        const rt = findTable(s.reserveTableId) || ({ label: "", seats: 0 } as TableT);
-        const can = s.resName.trim().length > 0;
-        const over = rt.seats > 0 && s.resGuests > rt.seats;
-        return (
-          <div style={overlay(0.45, 55)} onClick={() => patch({ showReserve: false })}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 472, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Reserveren op naam</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 22 }}>Tafel {rt.label}</div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Naam van de gast</label>
-              <input value={s.resName} onChange={(e) => patch({ resName: e.target.value })} placeholder="Bijv. Janssen" style={{ width: "100%", height: 50, border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "0 14px", fontSize: 16, color: "#101828", outline: "none", marginBottom: 18 }} />
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>
-                Aantal gasten {over && <span style={{ color: "#B54708", fontWeight: 600 }}>· meer dan capaciteit (max {rt.seats})</span>}
-              </label>
-              <div style={{ display: "flex", alignItems: "center", border: "1.5px solid " + (over ? "#FEC84B" : "#E4E7EC"), borderRadius: 12, height: 50, overflow: "hidden", width: 180, marginBottom: 18 }}>
-                <div onClick={() => patch((st) => ({ resGuests: Math.max(1, st.resGuests - 1) }))} style={{ width: 54, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer" }}>{"−"}</div>
-                <div style={{ flex: 1, textAlign: "center", fontSize: 16, fontWeight: 700, color: over ? "#B54708" : "#101828" }}>{s.resGuests}</div>
-                <div onClick={() => patch((st) => ({ resGuests: Math.min(20, st.resGuests + 1) }))} style={{ width: 54, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer" }}>+</div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Area</label>
+                  <div style={{ display: "flex", background: "#F2F4F7", borderRadius: 12, padding: 4, gap: 2, height: 50 }}>
+                    {AREA_ORDER.map((a) => {
+                      const on = s.rmArea === a;
+                      return (
+                        <div
+                          key={a}
+                          onClick={() => patch({ rmArea: a, rmTables: [] })}
+                          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: "#fff", color: "#101828", boxShadow: "0 1px 2px rgba(16,24,40,0.08)" } : { background: "transparent", color: "#667085" }) }}
+                        >
+                          {AREA_LABELS[a]}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Tijd</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 26 }}>
-                {["18:00", "18:30", "19:00", "19:30", "20:00", "20:30"].map((tm) => {
-                  const on = s.resTime === tm;
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+                {times.map((tm) => {
+                  const on = s.rmTime === tm;
                   return (
-                    <div key={tm} onClick={() => patch({ resTime: tm })} style={{ padding: "10px 14px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#475467", border: "1.5px solid #E4E7EC" }) }}>{tm}</div>
+                    <div key={tm} onClick={() => patch({ rmTime: tm })} style={{ padding: "9px 13px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#475467", border: "1.5px solid #E4E7EC" }) }}>{tm}</div>
                   );
                 })}
               </div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "#344054" }}>
+                  Tafel(s) <span style={{ color: "#98A2B3", fontWeight: 500 }}>· optioneel</span>
+                </label>
+                <span style={{ fontSize: 12, fontWeight: 600, color: PURPLE }}>{tablesHint}</span>
+              </div>
+              {tableOptions.length > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+                  {tableOptions.map((t) => {
+                    const on = s.rmTables.includes(t.id);
+                    return (
+                      <div key={t.id} onClick={() => rmToggleTable(t.id)} style={{ minWidth: 42, padding: "9px 12px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "center", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#344054", border: "1.5px solid #E4E7EC" }) }}>{t.label}</div>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{ display: "flex", gap: 12 }}>
-                <div onClick={() => patch({ showReserve: false })} style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
-                <div onClick={resConfirm} style={{ flex: 2, height: 52, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(can ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Bevestig reservering</div>
+                <div onClick={closeResModal} style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
+                <div onClick={rmConfirm} style={{ flex: 2, height: 52, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(can ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Reserveren</div>
               </div>
             </div>
           </div>
