@@ -175,6 +175,78 @@
   background: #f4ebff;
 }
 
+/* ── Drawer count grid (start & end of shift) ── */
+.pos-root .pos-denom {
+  background: #fff;
+  border: 1px solid #eaecf0;
+  border-radius: 14px;
+  padding: 10px 8px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: text;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+}
+.pos-root .pos-denom:focus-within {
+  border-color: #7000ff;
+  box-shadow: 0 0 0 3px rgba(112, 0, 255, 0.12);
+}
+.pos-root .pos-denom-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #667085;
+}
+.pos-root .pos-denom-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  padding: 0;
+  -moz-appearance: textfield;
+}
+
+/* ── Cart bill line (tap-anywhere to edit, touch-optimised) ── */
+.pos-root .pos-bill-line {
+  transition: background 0.1s ease;
+}
+.pos-root .pos-bill-line:hover {
+  background: #fafafb;
+}
+.pos-root .pos-bill-line:active {
+  background: #f4ebff;
+}
+/* Quantity stepper buttons (44px square = Apple HIG min; Material 48dp aligned) */
+.pos-root .pos-step {
+  transition: background 0.08s ease;
+}
+.pos-root .pos-step:hover {
+  background: #f9f5ff;
+}
+.pos-root .pos-step:active {
+  background: #f4ebff;
+}
+/* Square tap targets (delete / confirm in cart) */
+.pos-root .pos-tap {
+  transition: background 0.1s ease;
+}
+.pos-root .pos-del-btn.pos-tap:hover {
+  background: #fef3f2;
+}
+.pos-root .pos-del-btn.pos-tap:active {
+  background: #fee4e2;
+}
+.pos-root .pos-ok-btn.pos-tap:hover {
+  background: #ecfdf3;
+}
+.pos-root .pos-ok-btn.pos-tap:active {
+  background: #d1fadf;
+}
+
 /* ── Floor ── */
 .pos-floor-subhead {
   flex-shrink: 0;
