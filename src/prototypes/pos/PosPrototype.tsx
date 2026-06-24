@@ -63,8 +63,8 @@ interface PosState {
   activeStaff: string;
   pinUser: string | null;
   pinValue: string;
-  startCash: string;
-  endCounted: string;
+  startCounts: CashCounts;
+  endCounts: CashCounts;
   activeTableId: string | null;
   popoverId: string | null;
   showReserve: boolean;
@@ -82,6 +82,7 @@ interface PosState {
   nameInput: string;
   pendingAction: PendingAction;
   expandOverrides: Record<string, boolean>;
+  tableNotes: Record<string, string>;
   ordersTab: "open" | "closed";
   closedOrders: ClosedOrder[];
   selectedClosedId: string | null;
@@ -151,6 +152,27 @@ const EMPLOYEES: { name: string; color: string }[] = [
   { name: "Daan", color: "#F79009" },
 ];
 
+// Euro denominations for counting the drawer at start/end of shift
+// (NL hospitality drops 1/2-cent coins — cash rounds to €0,05).
+type CashCounts = Record<string, number>;
+const DENOMS: { key: string; label: string; value: number }[] = [
+  { key: "200", label: "€200", value: 200 },
+  { key: "100", label: "€100", value: 100 },
+  { key: "50", label: "€50", value: 50 },
+  { key: "20", label: "€20", value: 20 },
+  { key: "10", label: "€10", value: 10 },
+  { key: "5", label: "€5", value: 5 },
+  { key: "2", label: "€2", value: 2 },
+  { key: "1", label: "€1", value: 1 },
+  { key: "050", label: "€0,50", value: 0.5 },
+  { key: "020", label: "€0,20", value: 0.2 },
+  { key: "010", label: "€0,10", value: 0.1 },
+  { key: "005", label: "€0,05", value: 0.05 },
+];
+function cashTotal(counts: CashCounts): number {
+  return round2(DENOMS.reduce((s, d) => s + (counts[d.key] || 0) * d.value, 0));
+}
+
 function fmt(n: number): string {
   return "€" + Number(n).toFixed(2).replace(".", ",");
 }
@@ -184,8 +206,8 @@ function makeInitialState(): PosState {
     activeStaff: "Joel",
     pinUser: null,
     pinValue: "",
-    startCash: "100",
-    endCounted: "",
+    startCounts: { "50": 1, "20": 2, "10": 1 }, // tidy €100 opening float
+    endCounts: {},
     activeTableId: null,
     popoverId: null,
     showReserve: false,
@@ -203,6 +225,7 @@ function makeInitialState(): PosState {
     nameInput: "",
     pendingAction: null,
     expandOverrides: {},
+    tableNotes: { b8: "Verjaardag — taart om 21:00" },
     ordersTab: "open",
     closedOrders: [
       { id: "co1", label: "Tafel 12", paidAt: now - 600000, total: 22.0, subtotal: 22.0, tip: 0, discount: 0, payment: "pin", isWalkin: false, area: "bar", lines: [{ name: "Cappuccino", qty: 3, price: 3.4 }, { name: "Tosti ham-kaas", qty: 2, price: 4.5 }, { name: "Espresso", qty: 1, price: 2.8 }] },
@@ -365,6 +388,34 @@ function ArrowRightIcon() {
   );
 }
 
+// Drawer-count grid: one tile per euro denomination, tap to type the quantity.
+// Used for both the opening float (start) and the closing count (end of shift).
+function CashCountGrid({ counts, onSet }: { counts: CashCounts; onSet: (key: string, n: number) => void }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(100px, 1fr))", gap: 10 }}>
+      {DENOMS.map((d) => {
+        const n = counts[d.key] || 0;
+        return (
+          <label key={d.key} className="pos-denom">
+            <span className="pos-denom-label">{d.label}</span>
+            <input
+              value={String(n)}
+              onChange={(e) => {
+                const v = parseInt(e.target.value.replace(/[^0-9]/g, ""), 10);
+                onSet(d.key, isNaN(v) ? 0 : Math.min(v, 9999));
+              }}
+              onFocus={(e) => e.target.select()}
+              inputMode="numeric"
+              className="pos-denom-input"
+              style={{ color: n > 0 ? PURPLE : "#101828" }}
+            />
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Component ──────────────────────────────────────────
 export function PosPrototype() {
   useEffect(() => {
@@ -436,19 +487,19 @@ export function PosPrototype() {
   const pinCancel = () => patch({ pinUser: null, pinValue: "" });
   const pinBack = () => patch((st) => ({ pinValue: st.pinValue.slice(0, -1) }));
   const pinPress = (d: string) => patch((st) => (st.pinValue.length >= 4 ? {} : { pinValue: st.pinValue + d }));
-  const onStartCash = (v: string) => patch({ startCash: v.replace(/[^0-9.,]/g, "") });
+  const setStartCount = (key: string, n: number) => patch((st) => ({ startCounts: { ...st.startCounts, [key]: n } }));
   const confirmStart = () => {
     const nm = s.pinUser || s.activeStaff;
     setCartSheetOpen(false);
     patch({ shiftOpen: true, activeStaff: nm, screen: "floor", pinUser: null, pinValue: "" });
     setToast("Dienst gestart · " + nm);
   };
-  const onEndCounted = (v: string) => patch({ endCounted: v.replace(/[^0-9.,]/g, "") });
-  const beginEndShift = () => patch({ showUserMenu: false, screen: "end", endCounted: "" });
+  const setEndCount = (key: string, n: number) => patch((st) => ({ endCounts: { ...st.endCounts, [key]: n } }));
+  const beginEndShift = () => patch({ showUserMenu: false, screen: "end", endCounts: {} });
   const confirmEnd = () => {
     const nm = s.activeStaff;
     setCartSheetOpen(false);
-    patch({ shiftOpen: false, screen: "locked", pinUser: null, pinValue: "", endCounted: "" });
+    patch({ shiftOpen: false, screen: "locked", pinUser: null, pinValue: "", endCounts: {} });
     setToast("Dienst afgesloten · " + nm);
   };
 
@@ -696,14 +747,14 @@ export function PosPrototype() {
         return []; // done → bumped/delivered, remove from board
       }),
     }));
-  const markDelivered = (ticketId: string, name: string) =>
-    patch((st) => ({
-      tickets: st.tickets
-        .map((k) => (k.id !== ticketId ? k : { ...k, items: k.items.filter((it) => it.name !== name) }))
-        .filter((k) => k.items.length > 0),
-    }));
   const setExpand = (id: string, val: boolean) =>
     patch((st) => ({ expandOverrides: { ...st.expandOverrides, [id]: val } }));
+  const setTableNote = (id: string, val: string) =>
+    patch((st) => ({ tableNotes: { ...st.tableNotes, [id]: val } }));
+  const printInterimReceipt = (t: TableT) => {
+    const total = tableTotal(t);
+    setToast("Tussenbon geprint · " + tlabel(t) + " · " + fmt(total));
+  };
 
   // ── Checkout ──
   const onCheckout = () => {
@@ -747,6 +798,7 @@ export function PosPrototype() {
   // ── Derived ──
   const displayStaff = s.activeStaff || staffName;
   const staffInitial = (displayStaff[0] || "J").toUpperCase();
+  const startTotal = cashTotal(s.startCounts);
   const countFree = s.tables.filter((t) => t.status === "free" && !t.walkin).length;
   const countOcc = s.tables.filter((t) => t.status === "occupied").length;
   const countRes = s.tables.filter((t) => t.status === "reserved").length;
@@ -818,10 +870,16 @@ export function PosPrototype() {
       const wc = m >= 30 ? { color: "#B42318", background: "#FEE4E2" } : m >= 15 ? { color: "#B54708", background: "#FEF0C7" } : { color: "#475467", background: "#F2F4F7" };
       const ic = (t.orders || []).reduce((a, o) => a + o.qty, 0);
       const lbl = tlabel(t);
-      const todo: { qtyText: string; name: string; station: Station; ticketId: string }[] = [];
-      s.tickets.filter((k) => k.table === lbl).forEach((k) => k.items.forEach((it) => todo.push({ qtyText: it.qty + "×", name: it.name, station: k.station, ticketId: k.id })));
+      const inKitchen = (nm: string) => s.tickets.some((k) => k.table === lbl && k.items.some((it) => it.name === nm));
+      type OrderStatus = "delivered" | "progress" | "new";
+      const lines: { name: string; qty: number; price: number; status: OrderStatus }[] = (t.orders || []).map((o) => ({
+        name: o.name,
+        qty: o.qty,
+        price: o.price,
+        status: !o.sent ? "new" : inKitchen(o.name) ? "progress" : "delivered",
+      }));
       const exp = t.id in s.expandOverrides ? s.expandOverrides[t.id] : m >= 10;
-      return { t, m, wc, ic, lbl, todo, exp };
+      return { t, m, wc, ic, lbl, lines, exp };
     })
     .sort((a, b) => b.m - a.m);
 
@@ -931,14 +989,14 @@ export function PosPrototype() {
 
       {/* ───── Start shift (count opening float) ───── */}
       {s.screen === "start" && (
-        <div className="pos-screen" style={{ alignItems: "center", justifyContent: "center", background: "#F9FAFB", padding: 40 }}>
-          <div style={{ width: "min(420px, 100%)", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 30, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
+        <div className="pos-screen" style={{ background: "#F9FAFB", overflow: "auto", padding: 24 }}>
+          <div style={{ width: "min(560px, 100%)", margin: "auto", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 30, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Dienst starten</div>
-            <div style={{ fontSize: 14, color: "#667085", marginBottom: 24 }}>Welkom {s.pinUser || displayStaff} · tel het startgeld in de lade.</div>
-            <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Startgeld (wisselgeld)</label>
-            <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 54, padding: "0 14px", marginBottom: 24 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: "#98A2B3", marginRight: 6 }}>€</span>
-              <input value={s.startCash} onChange={(e) => onStartCash(e.target.value)} inputMode="decimal" style={{ flex: 1, border: "none", outline: "none", fontSize: 18, fontWeight: 700, color: "#101828", background: "transparent" }} />
+            <div style={{ fontSize: 14, color: "#667085", marginBottom: 22 }}>Welkom {s.pinUser || displayStaff} · tel het startgeld in de lade.</div>
+            <CashCountGrid counts={s.startCounts} onSet={setStartCount} />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F2F4F7", marginTop: 18, paddingTop: 16, marginBottom: 20 }}>
+              <span style={{ fontSize: 14, color: "#475467", fontWeight: 600 }}>Startgeld (wisselgeld)</span>
+              <span style={{ fontSize: 22, fontWeight: 800 }}>{fmt(startTotal)}</span>
             </div>
             <div onClick={confirmStart} style={{ height: 54, borderRadius: 14, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Dienst starten</div>
           </div>
@@ -1269,7 +1327,15 @@ export function PosPrototype() {
             {s.ordersTab === "open" ? (
               occ.length > 0 ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 940, margin: "0 auto" }}>
-                  {openOrders.map(({ t, m, wc, ic, lbl, todo, exp }) => (
+                  {openOrders.map(({ t, m, wc, ic, lbl, lines, exp }) => {
+                    const note = s.tableNotes[t.id] || "";
+                    const statusMeta = (st: "delivered" | "progress" | "new") =>
+                      st === "delivered"
+                        ? { label: "Geleverd", color: "#12B76A", bg: "#ECFDF3" }
+                        : st === "progress"
+                        ? { label: "In bereiding", color: "#B54708", bg: "#FEF0C7" }
+                        : { label: "Nieuw", color: "#6941C6", bg: "#F4EBFF" };
+                    return (
                     <div key={t.id} className="pos-oo-row" style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
                       <div onClick={() => setExpand(t.id, !exp)} style={{ display: "flex", alignItems: "center", gap: 18, padding: "15px 18px", cursor: "pointer" }}>
                         <div style={{ width: 50, height: 50, borderRadius: 12, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, fontWeight: 800, flexShrink: 0 }}>{t.walkin ? (t.name || "?").slice(0, 2) : t.label}</div>
@@ -1285,29 +1351,41 @@ export function PosPrototype() {
                         <span style={{ display: "inline-block", transition: "transform .15s", transform: exp ? "rotate(90deg)" : "rotate(0deg)", fontSize: 22, color: "#D0D5DD", fontWeight: 600 }}>{"›"}</span>
                       </div>
                       {exp && (
-                        <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "6px 18px 12px" }}>
-                          {todo.length > 0 ? (
-                            todo.map((td, i) => (
-                              <div key={i} onClick={() => markDelivered(td.ticketId, td.name)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 13, padding: "11px 2px", borderBottom: "1px solid #F2F4F7", cursor: "pointer" }}>
-                                <div style={{ width: 24, height: 24, borderRadius: 7, border: "2px solid #D0D5DD", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", color: "#D0D5DD" }}>
-                                  <CheckIcon size={14} />
-                                </div>
-                                <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 28 }}>{td.qtyText}</span>
-                                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{td.name}</span>
-                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 999, ...(td.station === "bar" ? { background: "#FEF0C7", color: "#B54708" } : { background: "#F4EBFF", color: "#6941C6" }) }}>{td.station === "bar" ? "Bar" : "Keuken"}</span>
+                        <div style={{ borderTop: "1px solid #F2F4F7", background: "#FCFCFD", padding: "10px 18px 14px" }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.04em", padding: "2px 0 6px" }}>Bestelling</div>
+                          {lines.map((ln, i) => {
+                            const sm = statusMeta(ln.status);
+                            return (
+                              <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
+                                <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
+                                <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
+                                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 999, background: sm.bg, color: sm.color, whiteSpace: "nowrap" }}>{sm.label}</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
                               </div>
-                            ))
-                          ) : (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 2px", fontSize: 14, fontWeight: 600, color: "#12B76A" }}>
-                              <CheckIcon size={16} />
-                              Alles geleverd
+                            );
+                          })}
+                          <div style={{ marginTop: 12, display: "flex", alignItems: "flex-start", gap: 10, background: "#fff", border: "1px solid #E4E7EC", borderRadius: 12, padding: "10px 12px" }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#98A2B3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginTop: 3, flexShrink: 0 }}>
+                              <path d="M4 5h16M4 10h16M4 15h10" />
+                            </svg>
+                            <input
+                              value={note}
+                              onChange={(e) => setTableNote(t.id, e.target.value)}
+                              placeholder="Notitie voor deze tafel — bv. allergie, verjaardag, betaalt apart…"
+                              style={{ flex: 1, minWidth: 0, border: "none", outline: "none", background: "transparent", fontSize: 14, fontWeight: 500, color: "#101828", padding: "3px 0" }}
+                            />
+                          </div>
+                          <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+                            <div onClick={() => printInterimReceipt(t)} className="pos-hover-row" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, height: 42, borderRadius: 11, background: "#fff", border: "1px solid #E4E7EC", color: "#344054", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+                              <PrintIcon size={15} />
+                              Tussenbon printen
                             </div>
-                          )}
-                          <div onClick={() => patch({ activeTableId: t.id, screen: "order" })} className="pos-hover-row" style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10, height: 42, borderRadius: 11, background: "#fff", border: "1px solid #E4E7EC", color: "#475467", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Open volledige bestelling ›</div>
+                            <div onClick={() => patch({ activeTableId: t.id, screen: "order" })} className="pos-hover-row" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, height: 42, borderRadius: 11, background: "#fff", border: "1px solid #E4E7EC", color: "#475467", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Open volledige bestelling ›</div>
+                          </div>
                         </div>
                       )}
                     </div>
-                  ))}
+                  );})}
                 </div>
               ) : (
                 <EmptyOrders title="Geen openstaande orders" sub="Alle tafels zijn vrij of afgerekend." />
@@ -1350,9 +1428,10 @@ export function PosPrototype() {
 
       {/* ───── End shift (count drawer + cash difference) ───── */}
       {s.screen === "end" && (() => {
-        const expected = (parseFloat((s.startCash || "0").replace(",", ".")) || 0) + 318.2;
-        const countedNum = parseFloat((s.endCounted || "").replace(",", "."));
-        const diff = isNaN(countedNum) ? null : countedNum - expected;
+        const expected = round2(startTotal + 318.2);
+        const endTotal = cashTotal(s.endCounts);
+        const anyCounted = DENOMS.some((d) => (s.endCounts[d.key] || 0) > 0);
+        const diff = anyCounted ? round2(endTotal - expected) : null;
         const diffText = diff == null ? "—" : (diff >= 0 ? "+ " : "− ") + fmt(Math.abs(diff));
         const diffColor = diff == null ? "#98A2B3" : diff < -0.005 ? "#B42318" : "#067647";
         return (
@@ -1365,7 +1444,7 @@ export function PosPrototype() {
               </div>
             </div>
             <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", justifyContent: "center", minHeight: 0 }}>
-              <div style={{ width: "min(460px, 100%)", display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ width: "min(560px, 100%)", display: "flex", flexDirection: "column", gap: 16 }}>
                 <div style={{ display: "flex", gap: 14 }}>
                   <div style={{ flex: 1, background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, padding: "16px 18px" }}>
                     <div style={{ fontSize: 13, color: "#667085", fontWeight: 600, marginBottom: 6 }}>Omzet</div>
@@ -1378,16 +1457,16 @@ export function PosPrototype() {
                 </div>
                 <div style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, padding: 20 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Kassa tellen</div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "2px 0 14px" }}>
                     <span style={{ fontSize: 14, color: "#667085", fontWeight: 500 }}>Verwacht in lade</span>
                     <span style={{ fontSize: 14, fontWeight: 700 }}>{fmt(expected)}</span>
                   </div>
-                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", margin: "10px 0 7px" }}>Geteld bedrag</label>
-                  <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 52, padding: "0 14px", marginBottom: 14 }}>
-                    <span style={{ fontSize: 17, fontWeight: 700, color: "#98A2B3", marginRight: 6 }}>€</span>
-                    <input value={s.endCounted} onChange={(e) => onEndCounted(e.target.value)} inputMode="decimal" placeholder="0,00" style={{ flex: 1, border: "none", outline: "none", fontSize: 17, fontWeight: 700, color: "#101828", background: "transparent" }} />
+                  <CashCountGrid counts={s.endCounts} onSet={setEndCount} />
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16 }}>
+                    <span style={{ fontSize: 14, color: "#475467", fontWeight: 600 }}>Geteld</span>
+                    <span style={{ fontSize: 18, fontWeight: 800 }}>{fmt(endTotal)}</span>
                   </div>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F2F4F7", paddingTop: 13 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F2F4F7", paddingTop: 13, marginTop: 10 }}>
                     <span style={{ fontSize: 14, fontWeight: 700 }}>Kasverschil</span>
                     <span style={{ fontSize: 15, fontWeight: 800, color: diffColor }}>{diffText}</span>
                   </div>
