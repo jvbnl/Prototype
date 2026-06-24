@@ -659,4 +659,28 @@
   .pos-oo-wait {
     display: none !important;
   }
+  /* The floor screen drops the location logo on phone — the action buttons
+     (Orders / Keuken / Nieuw order / menu) need the room. */
+  .pos-floor-logo {
+    display: none !important;
+  }
+  /* The "Spring naar" caption is implicit on mobile — the Bar / Terras pills
+     speak for themselves. */
+  .pos-jumpto-label {
+    display: none;
+  }
+  /* Compact "Reserveren" — icon only on phone so it fits next to the
+     legend pills on a single row. */
+  .pos-reserveer-btn {
+    padding: 9px 11px !important;
+    margin-left: auto !important;
+  }
+  .pos-reserveer-label {
+    display: none;
+  }
+  /* Tighter subhead padding to claim screen height for the grid. */
+  .pos-floor-subhead {
+    padding: 10px 14px 8px;
+    gap: 8px;
+  }
 }
