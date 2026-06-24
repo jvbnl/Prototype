@@ -67,10 +67,11 @@ interface PosState {
   endCounts: CashCounts;
   activeTableId: string | null;
   showReserve: boolean;
-  reserveTableId: string | null;
-  resName: string;
-  resGuests: number;
-  resTime: string;
+  rmName: string;
+  rmGuests: number;
+  rmTime: string;
+  rmArea: Area;
+  rmTables: string[];
   activeCat: string;
   showCheckout: boolean;
   toast: string | null;
@@ -209,10 +210,11 @@ function makeInitialState(): PosState {
     endCounts: {},
     activeTableId: null,
     showReserve: false,
-    reserveTableId: null,
-    resName: "",
-    resGuests: 2,
-    resTime: "19:30",
+    rmName: "",
+    rmGuests: 2,
+    rmTime: "19:30",
+    rmArea: "bar",
+    rmTables: [],
     activeCat: "alles",
     showCheckout: false,
     toast: null,
@@ -562,16 +564,34 @@ export function PosPrototype() {
       screen: "order",
     }));
   };
-  const resConfirm = () => {
-    if (!s.resName.trim()) return;
-    const id = s.reserveTableId!;
-    const nm = s.resName.trim();
-    const g = s.resGuests;
-    const tm = s.resTime;
-    const lbl = findTable(id)!.label;
-    updateTable(id, (t) => ({ ...t, status: "reserved", resName: nm, resGuests: g, guests: g, resTime: tm }));
-    patch({ showReserve: false });
-    setToast("Tafel " + lbl + " gereserveerd · " + nm);
+  // ── Reservering (global) ──
+  // Opens a richer reserve modal: pick area, time slot, guest count and
+  // optionally one or more specific tables. With no table chosen, the
+  // first free table in the selected area is auto-assigned.
+  const openResModal = () =>
+    patch((st) => ({ showReserve: true, rmName: "", rmGuests: 2, rmTime: "19:30", rmArea: st.rmArea || "bar", rmTables: [] }));
+  const closeResModal = () => patch({ showReserve: false });
+  const rmToggleTable = (id: string) =>
+    patch((st) => ({ rmTables: st.rmTables.includes(id) ? st.rmTables.filter((x) => x !== id) : st.rmTables.concat([id]) }));
+  const rmConfirm = () => {
+    const nm = s.rmName.trim();
+    if (!nm) return;
+    let ids = s.rmTables.slice();
+    if (!ids.length) {
+      const f = s.tables.find((t) => t.area === s.rmArea && t.status === "free");
+      if (f) ids = [f.id];
+    }
+    if (!ids.length) {
+      setToast("Geen vrije tafel in dit gebied");
+      return;
+    }
+    const g = s.rmGuests;
+    const tm = s.rmTime;
+    patch((st) => ({
+      tables: st.tables.map((t) => (ids.includes(t.id) ? { ...t, status: "reserved" as TableStatus, resName: nm, resGuests: g, guests: g, resTime: tm } : t)),
+      showReserve: false,
+    }));
+    setToast("Reservering " + nm + " · " + tm + " · " + g + " pers.");
   };
 
   // ── Order edits ──
@@ -1006,6 +1026,10 @@ export function PosPrototype() {
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#fff", border: "1.5px solid #E4E7EC" }} />} text={`${countFree} vrij`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#F4EBFF", border: "1.5px solid " + PURPLE }} />} text={`${countOcc} bezet`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#FFFBF4", border: "1.5px dashed #F79009" }} />} text={`${countRes} gereserveerd`} />
+              <div onClick={openResModal} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
+                Reserveren
+              </div>
             </div>
           </div>
 
@@ -1421,38 +1445,76 @@ export function PosPrototype() {
         );
       })()}
 
-      {/* ───── Reserve ───── */}
+      {/* ───── Reserve (global, from floor "Reserveren" button) ───── */}
       {s.showReserve && (() => {
-        const rt = findTable(s.reserveTableId) || ({ label: "", seats: 0 } as TableT);
-        const can = s.resName.trim().length > 0;
-        const over = rt.seats > 0 && s.resGuests > rt.seats;
+        const can = s.rmName.trim().length > 0;
+        const tableOptions = s.tables.filter((t) => t.area === s.rmArea && t.status === "free");
+        const tablesHint = s.rmTables.length
+          ? s.rmTables.length + " tafel(s) gekozen"
+          : "Automatisch toewijzen in " + AREA_LABELS[s.rmArea];
+        const times = ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00"];
         return (
-          <div style={overlay(0.45, 55)} onClick={() => patch({ showReserve: false })}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 472, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Reserveren op naam</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 22 }}>Tafel {rt.label}</div>
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Naam van de gast</label>
-              <input value={s.resName} onChange={(e) => patch({ resName: e.target.value })} placeholder="Bijv. Janssen" style={{ width: "100%", height: 50, border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "0 14px", fontSize: 16, color: "#101828", outline: "none", marginBottom: 18 }} />
-              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>
-                Aantal gasten {over && <span style={{ color: "#B54708", fontWeight: 600 }}>· meer dan capaciteit (max {rt.seats})</span>}
-              </label>
-              <div style={{ display: "flex", alignItems: "center", border: "1.5px solid " + (over ? "#FEC84B" : "#E4E7EC"), borderRadius: 12, height: 50, overflow: "hidden", width: 180, marginBottom: 18 }}>
-                <div onClick={() => patch((st) => ({ resGuests: Math.max(1, st.resGuests - 1) }))} style={{ width: 54, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer" }}>{"−"}</div>
-                <div style={{ flex: 1, textAlign: "center", fontSize: 16, fontWeight: 700, color: over ? "#B54708" : "#101828" }}>{s.resGuests}</div>
-                <div onClick={() => patch((st) => ({ resGuests: Math.min(20, st.resGuests + 1) }))} style={{ width: 54, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer" }}>+</div>
+          <div style={overlay(0.45, 55)} onClick={closeResModal}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 480, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 2 }}>Nieuwe reservering</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 20 }}>Leg een reservering vast voor de zaak.</div>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Naam</label>
+              <input value={s.rmName} onChange={(e) => patch({ rmName: e.target.value })} placeholder="Naam van de gast" style={{ width: "100%", height: 50, border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "0 14px", fontSize: 16, color: "#101828", outline: "none", marginBottom: 18 }} />
+              <div style={{ display: "flex", gap: 16, marginBottom: 18 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Aantal personen</label>
+                  <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 50, overflow: "hidden" }}>
+                    <div onClick={() => patch((st) => ({ rmGuests: Math.max(1, st.rmGuests - 1) }))} style={{ width: 48, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
+                    <div style={{ flex: 1, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{s.rmGuests}</div>
+                    <div onClick={() => patch((st) => ({ rmGuests: Math.min(20, st.rmGuests + 1) }))} style={{ width: 48, height: 50, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer", userSelect: "none" }}>+</div>
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Area</label>
+                  <div style={{ display: "flex", background: "#F2F4F7", borderRadius: 12, padding: 4, gap: 2, height: 50 }}>
+                    {AREA_ORDER.map((a) => {
+                      const on = s.rmArea === a;
+                      return (
+                        <div
+                          key={a}
+                          onClick={() => patch({ rmArea: a, rmTables: [] })}
+                          style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 9, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: "#fff", color: "#101828", boxShadow: "0 1px 2px rgba(16,24,40,0.08)" } : { background: "transparent", color: "#667085" }) }}
+                        >
+                          {AREA_LABELS[a]}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Tijd</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 26 }}>
-                {["18:00", "18:30", "19:00", "19:30", "20:00", "20:30"].map((tm) => {
-                  const on = s.resTime === tm;
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+                {times.map((tm) => {
+                  const on = s.rmTime === tm;
                   return (
-                    <div key={tm} onClick={() => patch({ resTime: tm })} style={{ padding: "10px 14px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#475467", border: "1.5px solid #E4E7EC" }) }}>{tm}</div>
+                    <div key={tm} onClick={() => patch({ rmTime: tm })} style={{ padding: "9px 13px", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#475467", border: "1.5px solid #E4E7EC" }) }}>{tm}</div>
                   );
                 })}
               </div>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 7 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "#344054" }}>
+                  Tafel(s) <span style={{ color: "#98A2B3", fontWeight: 500 }}>· optioneel</span>
+                </label>
+                <span style={{ fontSize: 12, fontWeight: 600, color: PURPLE }}>{tablesHint}</span>
+              </div>
+              {tableOptions.length > 0 && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+                  {tableOptions.map((t) => {
+                    const on = s.rmTables.includes(t.id);
+                    return (
+                      <div key={t.id} onClick={() => rmToggleTable(t.id)} style={{ minWidth: 42, padding: "9px 12px", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer", textAlign: "center", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#344054", border: "1.5px solid #E4E7EC" }) }}>{t.label}</div>
+                    );
+                  })}
+                </div>
+              )}
               <div style={{ display: "flex", gap: 12 }}>
-                <div onClick={() => patch({ showReserve: false })} style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
-                <div onClick={resConfirm} style={{ flex: 2, height: 52, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(can ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Bevestig reservering</div>
+                <div onClick={closeResModal} style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
+                <div onClick={rmConfirm} style={{ flex: 2, height: 52, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(can ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Reserveren</div>
               </div>
             </div>
           </div>
