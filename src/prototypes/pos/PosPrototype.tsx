@@ -13,7 +13,7 @@ import posCss from "./styles.css?raw";
    mobile (bottom-sheet cart, swipeable kitchen, stacked day report). */
 
 // ── Types ──────────────────────────────────────────────
-type Screen = "floor" | "order" | "kitchen" | "orders" | "day";
+type Screen = "locked" | "start" | "floor" | "order" | "kitchen" | "orders" | "day" | "end";
 type Area = "bar" | "terras";
 type TableStatus = "free" | "occupied" | "reserved";
 type Station = "bar" | "keuken";
@@ -59,6 +59,12 @@ interface Product {
 
 interface PosState {
   screen: Screen;
+  shiftOpen: boolean;
+  activeStaff: string;
+  pinUser: string | null;
+  pinValue: string;
+  startCash: string;
+  endCounted: string;
   activeTableId: string | null;
   popoverId: string | null;
   showReserve: boolean;
@@ -137,6 +143,14 @@ const AREA_ORDER: Area[] = ["bar", "terras"];
 const AREA_LABELS: Record<Area, string> = { bar: "Bar", terras: "Terras" };
 const PURPLE = "#7000FF";
 
+// Staff profiles shown on the lock screen (start/switch of shift)
+const EMPLOYEES: { name: string; color: string }[] = [
+  { name: "Joel", color: PURPLE },
+  { name: "Sophie", color: "#E0457B" },
+  { name: "Lisa", color: "#2E9C8E" },
+  { name: "Daan", color: "#F79009" },
+];
+
 function fmt(n: number): string {
   return "€" + Number(n).toFixed(2).replace(".", ",");
 }
@@ -165,7 +179,13 @@ function tlabel(t?: TableT | null): string {
 function makeInitialState(): PosState {
   const now = Date.now();
   return {
-    screen: "floor",
+    screen: "locked",
+    shiftOpen: false,
+    activeStaff: "Joel",
+    pinUser: null,
+    pinValue: "",
+    startCash: "100",
+    endCounted: "",
     activeTableId: null,
     popoverId: null,
     showReserve: false,
@@ -337,6 +357,13 @@ function XIcon() {
     </svg>
   );
 }
+function ArrowRightIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 8 }}>
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  );
+}
 
 // ── Component ──────────────────────────────────────────
 export function PosPrototype() {
@@ -367,6 +394,20 @@ export function PosPrototype() {
     };
   }, []);
 
+  // PIN complete (4 digits) → continue to "Dienst starten", or straight to the
+  // floor when switching user while a shift is already open.
+  useEffect(() => {
+    if (s.screen !== "locked" || !s.pinUser || s.pinValue.length !== 4) return;
+    const t = setTimeout(() => {
+      setS((cur) =>
+        cur.shiftOpen
+          ? { ...cur, activeStaff: cur.pinUser || cur.activeStaff, screen: "floor", pinUser: null, pinValue: "" }
+          : { ...cur, screen: "start" }
+      );
+    }, 200);
+    return () => clearTimeout(t);
+  }, [s.screen, s.pinUser, s.pinValue, s.shiftOpen]);
+
   const setToast = (msg: string) => {
     patch({ toast: msg });
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -388,6 +429,27 @@ export function PosPrototype() {
     const cont = document.getElementById("posFloorScroll");
     const el = document.getElementById("pos-sec-" + key);
     if (cont && el) cont.scrollTo({ top: Math.max(0, el.offsetTop - 8), behavior: "smooth" });
+  };
+
+  // ── Shift / lock (start & end of day) ──
+  const selectPinUser = (name: string) => patch({ pinUser: name, pinValue: "" });
+  const pinCancel = () => patch({ pinUser: null, pinValue: "" });
+  const pinBack = () => patch((st) => ({ pinValue: st.pinValue.slice(0, -1) }));
+  const pinPress = (d: string) => patch((st) => (st.pinValue.length >= 4 ? {} : { pinValue: st.pinValue + d }));
+  const onStartCash = (v: string) => patch({ startCash: v.replace(/[^0-9.,]/g, "") });
+  const confirmStart = () => {
+    const nm = s.pinUser || s.activeStaff;
+    setCartSheetOpen(false);
+    patch({ shiftOpen: true, activeStaff: nm, screen: "floor", pinUser: null, pinValue: "" });
+    setToast("Dienst gestart · " + nm);
+  };
+  const onEndCounted = (v: string) => patch({ endCounted: v.replace(/[^0-9.,]/g, "") });
+  const beginEndShift = () => patch({ showUserMenu: false, screen: "end", endCounted: "" });
+  const confirmEnd = () => {
+    const nm = s.activeStaff;
+    setCartSheetOpen(false);
+    patch({ shiftOpen: false, screen: "locked", pinUser: null, pinValue: "", endCounted: "" });
+    setToast("Dienst afgesloten · " + nm);
   };
 
   // ── Walk-in (counter) orders ──
@@ -683,7 +745,8 @@ export function PosPrototype() {
   };
 
   // ── Derived ──
-  const staffInitial = (staffName[0] || "J").toUpperCase();
+  const displayStaff = s.activeStaff || staffName;
+  const staffInitial = (displayStaff[0] || "J").toUpperCase();
   const countFree = s.tables.filter((t) => t.status === "free" && !t.walkin).length;
   const countOcc = s.tables.filter((t) => t.status === "occupied").length;
   const countRes = s.tables.filter((t) => t.status === "reserved").length;
@@ -714,22 +777,18 @@ export function PosPrototype() {
   }, [orders.length, s.screen, s.activeTableId]);
 
   // primary / secondary order actions
-  const unsentStations: Record<string, boolean> = {};
-  newSrc.forEach((o) => (unsentStations[stationForName(o.name)] = true));
-  const stKeys = Object.keys(unsentStations);
-  const sendLabel = stKeys.length > 1 ? "Doorsturen naar keuken & bar" : stKeys[0] === "bar" ? "Doorsturen naar de bar" : "Doorsturen naar de keuken";
-
   let primaryLabel = "";
   let primaryAction: () => void = () => {};
+  let primaryIcon = false;
   let showPrimary = true;
   let secondaryLabel = "";
   let secondaryAction: () => void = () => {};
   if (at.walkin) {
-    if (hasUnsent) { primaryLabel = sendLabel; primaryAction = () => sendKitchen(); secondaryLabel = "Afrekenen"; secondaryAction = onCheckout; }
+    if (hasUnsent) { primaryLabel = "Submit"; primaryIcon = true; primaryAction = () => sendKitchen(); secondaryLabel = "Afrekenen"; secondaryAction = onCheckout; }
     else if (hasItems) { primaryLabel = "Afrekenen"; primaryAction = onCheckout; secondaryLabel = "Order parkeren"; secondaryAction = () => parkOrder(); }
     else { showPrimary = false; secondaryLabel = "Annuleren"; secondaryAction = discardWalkin; }
   } else if (hasUnsent) {
-    primaryLabel = sendLabel; primaryAction = () => sendKitchen(); secondaryLabel = "Afrekenen"; secondaryAction = onCheckout;
+    primaryLabel = "Submit"; primaryIcon = true; primaryAction = () => sendKitchen(); secondaryLabel = "Afrekenen"; secondaryAction = onCheckout;
   } else if (hasItems) {
     primaryLabel = "Afrekenen"; primaryAction = onCheckout; secondaryLabel = "Tafel sluiten"; secondaryAction = () => finalizeSimpleClose();
   } else {
@@ -823,6 +882,69 @@ export function PosPrototype() {
   // ── Render ──
   return (
     <div className="pos-root">
+      {/* ───── Locked / sign-in (start of shift) ───── */}
+      {s.screen === "locked" && (
+        <div className="pos-screen" style={{ alignItems: "center", justifyContent: "center", background: "#F9FAFB", padding: 40 }}>
+          <img src="/prototypes/pos/location-logo.svg" alt={locationName} style={{ height: 34, display: "block", marginBottom: 8 }} />
+          <div style={{ fontSize: 14, color: "#98A2B3", fontWeight: 500, marginBottom: 38 }}>Point of Sale</div>
+          {s.pinUser ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Hoi {s.pinUser}</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 24 }}>Voer je pincode in</div>
+              <div style={{ display: "flex", gap: 14, marginBottom: 28 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: i < s.pinValue.length ? PURPLE : "transparent", border: "2px solid " + (i < s.pinValue.length ? PURPLE : "#D0D5DD") }} />
+                ))}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 84px)", gap: 12 }}>
+                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"].map((d, i) => (
+                  <div
+                    key={i}
+                    onClick={() => { if (d === "back") pinBack(); else if (d !== "") pinPress(d); }}
+                    className={d === "" ? undefined : "pos-key"}
+                    style={{ height: 64, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, cursor: d === "" ? "default" : "pointer", background: d === "" ? "transparent" : "#fff", border: d === "" ? "none" : "1px solid #EAECF0", color: "#101828", userSelect: "none" }}
+                  >
+                    {d === "back" ? "⌫" : d}
+                  </div>
+                ))}
+              </div>
+              <div onClick={pinCancel} style={{ marginTop: 24, fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer" }}>Annuleren</div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 15, fontWeight: 600, color: "#475467", marginBottom: 22 }}>Kies je profiel om in te loggen</div>
+              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
+                {EMPLOYEES.map((e, idx) => {
+                  const name = idx === 0 ? staffName || e.name : e.name;
+                  return (
+                    <div key={e.name} onClick={() => selectPinUser(name)} className="pos-profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 11, cursor: "pointer", padding: "16px 22px", borderRadius: 18 }}>
+                      <div style={{ width: 64, height: 64, borderRadius: "50%", background: e.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700 }}>{(name[0] || "?").toUpperCase()}</div>
+                      <span style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{name}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ───── Start shift (count opening float) ───── */}
+      {s.screen === "start" && (
+        <div className="pos-screen" style={{ alignItems: "center", justifyContent: "center", background: "#F9FAFB", padding: 40 }}>
+          <div style={{ width: "min(420px, 100%)", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 30, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
+            <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Dienst starten</div>
+            <div style={{ fontSize: 14, color: "#667085", marginBottom: 24 }}>Welkom {s.pinUser || displayStaff} · tel het startgeld in de lade.</div>
+            <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", marginBottom: 7 }}>Startgeld (wisselgeld)</label>
+            <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 54, padding: "0 14px", marginBottom: 24 }}>
+              <span style={{ fontSize: 18, fontWeight: 700, color: "#98A2B3", marginRight: 6 }}>€</span>
+              <input value={s.startCash} onChange={(e) => onStartCash(e.target.value)} inputMode="decimal" style={{ flex: 1, border: "none", outline: "none", fontSize: 18, fontWeight: 700, color: "#101828", background: "transparent" }} />
+            </div>
+            <div onClick={confirmStart} style={{ height: 54, borderRadius: 14, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Dienst starten</div>
+          </div>
+        </div>
+      )}
+
       {/* ───── Floor ───── */}
       {s.screen === "floor" && (
         <div className="pos-screen">
@@ -1022,7 +1144,7 @@ export function PosPrototype() {
                   <span style={{ fontSize: 22, fontWeight: 800 }}>{fmt(subtotal)}</span>
                 </div>
                 {showPrimary && (
-                  <div onClick={primaryAction} style={{ height: 54, borderRadius: 14, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer", background: PURPLE, color: "#fff" }}>{primaryLabel}</div>
+                  <div onClick={primaryAction} style={{ height: 54, borderRadius: 14, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer", background: PURPLE, color: "#fff" }}>{primaryIcon && <ArrowRightIcon />}{primaryLabel}</div>
                 )}
                 <div onClick={secondaryAction} style={{ height: 52, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 600, cursor: "pointer", background: "#fff", border: "1px solid #E4E7EC", color: "#475467" }}>{secondaryLabel}</div>
               </div>
@@ -1036,7 +1158,7 @@ export function PosPrototype() {
                   <div style={{ fontSize: 18, fontWeight: 800 }}>{fmt(subtotal)}</div>
                 </div>
               </div>
-              <div onClick={barAction} style={{ height: 48, padding: "0 18px", borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", ...(showPrimary ? { background: PURPLE, color: "#fff" } : { background: "#F2F4F7", color: "#475467" }) }}>{barLabel}</div>
+              <div onClick={barAction} style={{ height: 48, padding: "0 18px", borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", ...(showPrimary ? { background: PURPLE, color: "#fff" } : { background: "#F2F4F7", color: "#475467" }) }}>{showPrimary && primaryIcon && <ArrowRightIcon />}{barLabel}</div>
             </div>
           </div>
         </div>
@@ -1224,7 +1346,58 @@ export function PosPrototype() {
       )}
 
       {/* ───── Day report ───── */}
-      {s.screen === "day" && <DayReport staffName={staffName} staffInitial={staffInitial} onBack={backToFloor} />}
+      {s.screen === "day" && <DayReport staffName={displayStaff} staffInitial={staffInitial} onBack={backToFloor} />}
+
+      {/* ───── End shift (count drawer + cash difference) ───── */}
+      {s.screen === "end" && (() => {
+        const expected = (parseFloat((s.startCash || "0").replace(",", ".")) || 0) + 318.2;
+        const countedNum = parseFloat((s.endCounted || "").replace(",", "."));
+        const diff = isNaN(countedNum) ? null : countedNum - expected;
+        const diffText = diff == null ? "—" : (diff >= 0 ? "+ " : "− ") + fmt(Math.abs(diff));
+        const diffColor = diff == null ? "#98A2B3" : diff < -0.005 ? "#B42318" : "#067647";
+        return (
+          <div className="pos-screen">
+            <div className="pos-header">
+              <div className="pos-header-side">
+                <div className="pos-icon-btn" onClick={backToFloor} style={{ fontSize: 20 }}>{"←"}</div>
+                <div className="pos-header-title">Dienst afsluiten</div>
+                <div className="pos-header-sub">{displayStaff} · sinds 08:00</div>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: "auto", padding: 24, display: "flex", justifyContent: "center", minHeight: 0 }}>
+              <div style={{ width: "min(460px, 100%)", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "flex", gap: 14 }}>
+                  <div style={{ flex: 1, background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 13, color: "#667085", fontWeight: 600, marginBottom: 6 }}>Omzet</div>
+                    <div style={{ fontSize: 22, fontWeight: 800 }}>€1.284,50</div>
+                  </div>
+                  <div style={{ flex: 1, background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, padding: "16px 18px" }}>
+                    <div style={{ fontSize: 13, color: "#667085", fontWeight: 600, marginBottom: 6 }}>Transacties</div>
+                    <div style={{ fontSize: 22, fontWeight: 800 }}>96</div>
+                  </div>
+                </div>
+                <div style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, padding: 20 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Kassa tellen</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 0" }}>
+                    <span style={{ fontSize: 14, color: "#667085", fontWeight: 500 }}>Verwacht in lade</span>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{fmt(expected)}</span>
+                  </div>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: "#344054", display: "block", margin: "10px 0 7px" }}>Geteld bedrag</label>
+                  <div style={{ display: "flex", alignItems: "center", border: "1.5px solid #E4E7EC", borderRadius: 12, height: 52, padding: "0 14px", marginBottom: 14 }}>
+                    <span style={{ fontSize: 17, fontWeight: 700, color: "#98A2B3", marginRight: 6 }}>€</span>
+                    <input value={s.endCounted} onChange={(e) => onEndCounted(e.target.value)} inputMode="decimal" placeholder="0,00" style={{ flex: 1, border: "none", outline: "none", fontSize: 17, fontWeight: 700, color: "#101828", background: "transparent" }} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F2F4F7", paddingTop: 13 }}>
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>Kasverschil</span>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: diffColor }}>{diffText}</span>
+                  </div>
+                </div>
+                <div onClick={confirmEnd} style={{ height: 54, borderRadius: 14, background: "#1D1B52", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Dienst afsluiten</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ───── Table popover ───── */}
       {s.popoverId != null && s.screen === "floor" && (() => {
@@ -1328,7 +1501,7 @@ export function PosPrototype() {
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px 12px" }}>
               <div style={{ width: 38, height: 38, borderRadius: "50%", background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15 }}>{staffInitial}</div>
               <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>{staffName}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>{displayStaff}</div>
                 <div style={{ fontSize: 12, color: "#98A2B3" }}>Ingelogd</div>
               </div>
             </div>
@@ -1339,7 +1512,7 @@ export function PosPrototype() {
             <MenuRow icon={<><rect x="3.5" y="8" width="17" height="11" rx="2" stroke="currentColor" strokeWidth="1.7" /><path d="M3.5 12.5h17M10 15.5h4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></>} label="Kassalade openen" onClick={() => { patch({ showUserMenu: false }); setToast("Kassalade geopend"); }} raw />
             <MenuRow icon={<><path d="M4 8h16M4 16h16" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /><circle cx="14" cy="8" r="2.5" fill="#fff" stroke="currentColor" strokeWidth="1.7" /><circle cx="9" cy="16" r="2.5" fill="#fff" stroke="currentColor" strokeWidth="1.7" /></>} label="Instellingen" onClick={() => { patch({ showUserMenu: false }); setToast("Instellingen geopend"); }} raw />
             <div style={{ height: 1, background: "#F2F4F7", margin: "6px 2px" }} />
-            <div className="pos-hover-danger" onClick={() => { patch({ showUserMenu: false }); setToast("Dienst beëindigd"); }} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 10px", borderRadius: 10, cursor: "pointer", color: "#D92D20" }}>
+            <div className="pos-hover-danger" onClick={beginEndShift} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 10px", borderRadius: 10, cursor: "pointer", color: "#D92D20" }}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 4v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M7.5 7.5a6.5 6.5 0 1 0 9 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
               <span style={{ fontSize: 14, fontWeight: 700 }}>Dienst beëindigen</span>
             </div>
@@ -1906,7 +2079,7 @@ function PosTweaks({
 
         <div className="pos-twk-sect">Scherm</div>
         <div className="pos-twk-seg">
-          {([["floor", "Vloer"], ["kitchen", "Keuken"], ["orders", "Orders"], ["day", "Dag"]] as const).map(([k, label]) => (
+          {([["locked", "Lock"], ["start", "Start"], ["floor", "Vloer"], ["kitchen", "Keuken"], ["orders", "Orders"], ["day", "Dag"], ["end", "Eind"]] as const).map(([k, label]) => (
             <button key={k} className={screen === k ? "on" : ""} onClick={() => setScreen(k)}>{label}</button>
           ))}
         </div>

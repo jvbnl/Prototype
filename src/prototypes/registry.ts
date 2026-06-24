@@ -19,7 +19,7 @@ export const PROTOTYPES: PrototypeMeta[] = [
     title: "Gymly POS",
     tagline: "Restaurant & bar point-of-sale",
     description:
-      "Touch POS for hospitality: floor plan with table statuses, order screen with category-tinted products and a kitchen/bar order ticket, a kitchen display board, and open-orders overview — plus reserve, checkout and cancel flows. Fully responsive with a mobile bottom-sheet cart.",
+      "Touch POS for hospitality: PIN sign-in with start- and end-of-shift cash counting, floor plan with table statuses, order screen with category-tinted products and a kitchen/bar order ticket, a kitchen display board, and open-orders overview — plus reserve, checkout and cancel flows. Fully responsive with a mobile bottom-sheet cart.",
     tags: ["POS", "Hospitality", "Mobile"],
     accent: "#7000FF",
     component: PosPrototype,
