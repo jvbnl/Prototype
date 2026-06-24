@@ -78,6 +78,7 @@ interface PosState {
   showUserMenu: boolean;
   editingOid: string | null;
   cancelOid: string | null;
+  cancelMode: "remove" | "decrement";
   showNamePrompt: boolean;
   nameInput: string;
   pendingAction: PendingAction;
@@ -228,6 +229,7 @@ function makeInitialState(): PosState {
     showUserMenu: false,
     editingOid: null,
     cancelOid: null,
+    cancelMode: "remove",
     showNamePrompt: false,
     nameInput: "",
     pendingAction: null,
@@ -714,9 +716,14 @@ export function PosPrototype() {
     const t = findTable(s.activeTableId);
     const item = t && (t.orders || []).find((o) => o.oid === oid);
     const nm = item ? item.name : "";
-    removeSentLine(oid);
-    patch({ cancelOid: null, editingOid: null });
-    setToast("Geannuleerd: " + nm + " · " + reason + " · voorraad gecorrigeerd");
+    if (s.cancelMode === "decrement") {
+      adjustSentQty(oid, -1);
+      setToast("1× " + nm + " af · " + reason + " · voorraad gecorrigeerd");
+    } else {
+      removeSentLine(oid);
+      setToast("Geannuleerd: " + nm + " · " + reason + " · voorraad gecorrigeerd");
+    }
+    patch({ cancelOid: null, cancelMode: "remove", editingOid: null });
   };
 
   // ── Kitchen / expediting ──
@@ -1003,7 +1010,9 @@ export function PosPrototype() {
 
   function BillLine({ o }: { o: OrderLine }) {
     const editing = s.editingOid === o.oid;
-    const onDec = () => adjustSentQty(o.oid, -1);
+    // Mutating an already-sent line requires a reason (stock correction),
+    // same flow as the explicit cancel — see confirmCancel.
+    const onDec = () => patch({ cancelOid: o.oid, cancelMode: "decrement" });
     const onInc = () => adjustSentQty(o.oid, 1);
     if (!editing)
       // Tap-the-whole-row to edit — standard touch POS pattern (Square /
@@ -1027,7 +1036,7 @@ export function PosPrototype() {
           <div style={{ minWidth: 32, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{o.qty}</div>
           <div onClick={onInc} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: PURPLE, cursor: "pointer", userSelect: "none" }}>+</div>
         </div>
-        <div className="pos-del-btn pos-tap" onClick={() => patch({ cancelOid: o.oid })} title="Annuleren" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#D92D20", flexShrink: 0 }}>
+        <div className="pos-del-btn pos-tap" onClick={() => patch({ cancelOid: o.oid, cancelMode: "remove" })} title="Annuleren" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#D92D20", flexShrink: 0 }}>
           <XIcon />
         </div>
         <div className="pos-ok-btn pos-tap" onClick={() => toggleEdit(o.oid)} title="Klaar" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#12B76A", flexShrink: 0 }}>
@@ -1703,12 +1712,18 @@ export function PosPrototype() {
       {/* ───── Cancel reason ───── */}
       {s.cancelOid != null && s.screen === "order" && (() => {
         const item = (at.orders || []).find((o) => o.oid === s.cancelOid);
-        const name = item ? item.qty + "× " + item.name : "";
+        const decrement = s.cancelMode === "decrement";
+        const title = decrement ? "Reden van wijziging" : "Reden van annuleren";
+        const sub = !item
+          ? ""
+          : decrement
+          ? "1× " + item.name + " eraf · was " + item.qty + "×"
+          : item.qty + "× " + item.name;
         return (
-          <div style={overlay(0.45, 58)} onClick={() => patch({ cancelOid: null })}>
+          <div style={overlay(0.45, 58)} onClick={() => patch({ cancelOid: null, cancelMode: "remove" })}>
             <div onClick={stop} style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 2 }}>Reden van annuleren</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>{name}</div>
+              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 2 }}>{title}</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>{sub}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {["Damaged", "Eigen gebruik", "Verkeerd aangeslagen", "Representatie"].map((r) => (
                   <div key={r} className="pos-hover-row" onClick={() => confirmCancel(r)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", border: "1px solid #E4E7EC", borderRadius: 12, cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#344054" }}>
@@ -1717,7 +1732,7 @@ export function PosPrototype() {
                   </div>
                 ))}
               </div>
-              <div onClick={() => patch({ cancelOid: null })} style={{ marginTop: 14, height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#667085" }}>Sluiten</div>
+              <div onClick={() => patch({ cancelOid: null, cancelMode: "remove" })} style={{ marginTop: 14, height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#667085" }}>Sluiten</div>
             </div>
           </div>
         );
