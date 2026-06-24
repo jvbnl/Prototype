@@ -83,6 +83,13 @@ interface PosState {
   pendingAction: PendingAction;
   expandOverrides: Record<string, boolean>;
   tableNotes: Record<string, string>;
+  tableDiscount: Record<string, number>;
+  actionsOpen: boolean;
+  showNoteModal: boolean;
+  noteInput: string;
+  showMoveModal: boolean;
+  showMergeModal: boolean;
+  showDiscountModal: boolean;
   ordersTab: "open" | "closed";
   closedOrders: ClosedOrder[];
   selectedClosedId: string | null;
@@ -226,6 +233,13 @@ function makeInitialState(): PosState {
     pendingAction: null,
     expandOverrides: {},
     tableNotes: { b8: "Verjaardag — taart om 21:00" },
+    tableDiscount: {},
+    actionsOpen: false,
+    showNoteModal: false,
+    noteInput: "",
+    showMoveModal: false,
+    showMergeModal: false,
+    showDiscountModal: false,
     ordersTab: "open",
     closedOrders: [
       { id: "co1", label: "Tafel 12", paidAt: now - 600000, total: 22.0, subtotal: 22.0, tip: 0, discount: 0, payment: "pin", isWalkin: false, area: "bar", lines: [{ name: "Cappuccino", qty: 3, price: 3.4 }, { name: "Tosti ham-kaas", qty: 2, price: 4.5 }, { name: "Espresso", qty: 1, price: 2.8 }] },
@@ -755,6 +769,99 @@ export function PosPrototype() {
     setToast("Tussenbon geprint · " + tlabel(t) + " · " + fmt(total));
   };
 
+  // ── Order-screen "⋯ Acties" menu ────────────────────────
+  const openActions = () => patch({ actionsOpen: true });
+  const closeActions = () => patch({ actionsOpen: false });
+
+  // Notitie toevoegen
+  const openNoteModal = () => {
+    const t = findTable(s.activeTableId);
+    patch({ actionsOpen: false, showNoteModal: true, noteInput: (t && s.tableNotes[t.id]) || "" });
+  };
+  const saveNote = () => {
+    const id = s.activeTableId;
+    if (!id) return;
+    setTableNote(id, s.noteInput.trim());
+    patch({ showNoteModal: false });
+    setToast(s.noteInput.trim() ? "Notitie opgeslagen" : "Notitie gewist");
+  };
+
+  // Tafel verplaatsen (naar een vrije tafel)
+  const openMoveModal = () => patch({ actionsOpen: false, showMoveModal: true });
+  const moveTableTo = (targetId: string) => {
+    const sourceId = s.activeTableId;
+    if (!sourceId || sourceId === targetId) return;
+    const source = findTable(sourceId);
+    const target = findTable(targetId);
+    if (!source || !target) return;
+    const lbl = tlabel(source);
+    patch((st) => ({
+      tables: st.tables
+        .map((t) =>
+          t.id === targetId
+            ? { ...t, status: "occupied" as TableStatus, orders: source.orders || [], guests: source.guests || source.seats, openedAt: source.openedAt || Date.now(), resName: source.resName, resTime: source.resTime }
+            : t.id === sourceId
+            ? { ...t, status: "free" as TableStatus, orders: [], guests: 0, openedAt: null, resName: "", resTime: "" }
+            : t
+        )
+        .filter((t) => !(t.walkin && t.id === sourceId)),
+      tickets: st.tickets.map((k) => (k.table === lbl ? { ...k, table: target.walkin ? (target.name || "Tafel " + target.label) : "Tafel " + target.label } : k)),
+      tableNotes: { ...st.tableNotes, [targetId]: st.tableNotes[sourceId] || "" },
+      tableDiscount: st.tableDiscount[sourceId] != null ? { ...st.tableDiscount, [targetId]: st.tableDiscount[sourceId] } : st.tableDiscount,
+      activeTableId: targetId,
+      showMoveModal: false,
+    }));
+    setToast(lbl + " verplaatst naar Tafel " + target.label);
+  };
+
+  // Tafels mergen (orders worden samengevoegd op de doeltafel)
+  const openMergeModal = () => patch({ actionsOpen: false, showMergeModal: true });
+  const mergeWithTable = (targetId: string) => {
+    const sourceId = s.activeTableId;
+    if (!sourceId || sourceId === targetId) return;
+    const source = findTable(sourceId);
+    const target = findTable(targetId);
+    if (!source || !target) return;
+    const sourceLbl = tlabel(source);
+    const targetLbl = tlabel(target);
+    const sourceOrders = (source.orders || []).map((o) => ({ ...o, oid: "m" + Date.now() + Math.random().toString(36).slice(2, 6) }));
+    patch((st) => ({
+      tables: st.tables
+        .map((t) =>
+          t.id === targetId
+            ? { ...t, orders: (t.orders || []).concat(sourceOrders), guests: (t.guests || 0) + (source.guests || 0) }
+            : t.id === sourceId
+            ? { ...t, status: "free" as TableStatus, orders: [], guests: 0, openedAt: null, resName: "", resTime: "" }
+            : t
+        )
+        .filter((t) => !(t.walkin && t.id === sourceId)),
+      tickets: st.tickets.map((k) => (k.table === sourceLbl ? { ...k, table: targetLbl } : k)),
+      activeTableId: targetId,
+      showMergeModal: false,
+    }));
+    setToast(sourceLbl + " samengevoegd met " + targetLbl);
+  };
+
+  // Korting op de hele rekening
+  const openDiscountModal = () => patch({ actionsOpen: false, showDiscountModal: true });
+  const applyTableDiscount = (pct: number) => {
+    const id = s.activeTableId;
+    if (!id) return;
+    patch((st) => {
+      const next: Record<string, number> = { ...st.tableDiscount };
+      if (pct > 0) next[id] = pct;
+      else delete next[id];
+      return { tableDiscount: next, showDiscountModal: false };
+    });
+    setToast(pct > 0 ? "Korting " + pct + "% toegepast" : "Korting verwijderd");
+  };
+
+  // Tafel sluiten zonder afrekenen (gratis / interne consumptie)
+  const closeWithoutPayment = () => {
+    patch({ actionsOpen: false });
+    finalizeSimpleClose();
+  };
+
   // ── Checkout ──
   const onCheckout = () => {
     const t = findTable(s.activeTableId);
@@ -1106,9 +1213,10 @@ export function PosPrototype() {
               <div className="pos-header-sub">{at.walkin ? "Losse order" : (at.guests || at.seats) + " gasten"}</div>
             </div>
             <div className="pos-header-side">
-              <OrdersButton />
-              <KitchenButton />
-              <Avatar />
+              <div className="pos-btn" onClick={openActions}>
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></svg>
+                <span className="pos-btn-label">Acties</span>
+              </div>
             </div>
           </div>
 
@@ -1677,6 +1785,186 @@ export function PosPrototype() {
                 </div>
               </div>
               <div onClick={close} style={{ marginTop: 10, height: 44, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 14, fontWeight: 600, color: "#667085" }}>Sluiten</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Order actions sheet (⋯ Acties) ───── */}
+      {s.actionsOpen && s.screen === "order" && (() => {
+        const hasNote = !!(s.tableNotes[at.id] || "").trim();
+        const hasDiscount = (s.tableDiscount[at.id] || 0) > 0;
+        const ActionRow = ({ icon, label, sub, onClick, danger }: { icon: ReactNode; label: string; sub?: string; onClick: () => void; danger?: boolean }) => (
+          <div onClick={onClick} className={danger ? "pos-hover-danger" : "pos-hover-row"} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 14px", borderRadius: 12, cursor: "pointer", color: danger ? "#D92D20" : "#101828", minHeight: 56 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: danger ? "#FEF3F2" : "#F4EBFF", color: danger ? "#D92D20" : "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 600 }}>{label}</div>
+              {sub && <div style={{ fontSize: 12.5, color: "#98A2B3", fontWeight: 500, marginTop: 1 }}>{sub}</div>}
+            </div>
+            <span style={{ color: "#D0D5DD", fontSize: 20 }}>{"›"}</span>
+          </div>
+        );
+        return (
+          <div style={overlay(0.45, 58)} onClick={closeActions}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 420, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 18, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", padding: "6px 10px 14px" }}>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>Acties</div>
+                <div style={{ fontSize: 13, color: "#667085" }}>{tlabel(at)}</div>
+              </div>
+              <ActionRow
+                icon={<PrintIcon size={18} />}
+                label="Bon printen"
+                sub="Tussenbon van de lopende rekening"
+                onClick={() => { closeActions(); printInterimReceipt(at); }}
+              />
+              <ActionRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16M4 10h16M4 15h10" /></svg>}
+                label={hasNote ? "Notitie bewerken" : "Notitie toevoegen"}
+                sub={hasNote ? (s.tableNotes[at.id] || "").trim() : "Allergie, gelegenheid, betaalt apart…"}
+                onClick={openNoteModal}
+              />
+              <ActionRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5" /></svg>}
+                label="Tafel verplaatsen"
+                sub="Naar een vrije tafel"
+                onClick={openMoveModal}
+              />
+              <ActionRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4v7l-3 3M17 4v7l3 3M7 14h10M12 14v6" /></svg>}
+                label="Tafels samenvoegen"
+                sub="Voeg deze toe aan een andere bezette tafel"
+                onClick={openMergeModal}
+              />
+              <ActionRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="8" r="2.2" /><circle cx="16" cy="16" r="2.2" /><path d="M19 5 5 19" /></svg>}
+                label={hasDiscount ? `Korting · ${s.tableDiscount[at.id]}%` : "Korting toevoegen"}
+                sub={hasDiscount ? "Tik om aan te passen of te verwijderen" : "Op de hele rekening"}
+                onClick={openDiscountModal}
+              />
+              <div style={{ height: 1, background: "#F2F4F7", margin: "8px 10px" }} />
+              <ActionRow
+                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M6 6l12 12" /></svg>}
+                label="Sluiten zonder afrekenen"
+                sub="Voor gratis weggegeven / interne consumptie"
+                onClick={closeWithoutPayment}
+                danger
+              />
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Notitie modal ───── */}
+      {s.showNoteModal && (
+        <div style={overlay(0.45, 60)} onClick={() => patch({ showNoteModal: false })}>
+          <div onClick={stop} style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+            <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Notitie voor {tlabel(at)}</div>
+            <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>Allergie, gelegenheid, "betaalt apart", etc. Zichtbaar in de open orders.</div>
+            <textarea
+              autoFocus
+              value={s.noteInput}
+              onChange={(e) => patch({ noteInput: e.target.value })}
+              placeholder="Bijv. Allergisch voor noten · Verjaardag — taart om 21:00"
+              rows={3}
+              style={{ width: "100%", border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "12px 14px", fontSize: 15, color: "#101828", outline: "none", marginBottom: 20, resize: "vertical", fontFamily: "inherit" }}
+            />
+            <div style={{ display: "flex", gap: 12 }}>
+              <div onClick={() => patch({ showNoteModal: false })} style={{ flex: 1, height: 52, borderRadius: 13, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
+              <div onClick={saveNote} style={{ flex: 2, height: 52, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, cursor: "pointer", background: PURPLE, color: "#fff" }}>Opslaan</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ───── Tafel verplaatsen modal ───── */}
+      {s.showMoveModal && (() => {
+        const free = s.tables.filter((t) => t.status === "free" && !t.walkin && t.id !== at.id);
+        const byArea = AREA_ORDER.map((a) => ({ a, list: free.filter((t) => t.area === a) }));
+        return (
+          <div style={overlay(0.45, 60)} onClick={() => patch({ showMoveModal: false })}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 480, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Verplaatsen vanaf {tlabel(at)}</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>Kies een vrije tafel. De hele bestelling gaat mee.</div>
+              {byArea.map(({ a, list }) => (
+                <div key={a} style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.04em", margin: "2px 0 8px" }}>{AREA_LABELS[a]}</div>
+                  {list.length ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {list.map((t) => (
+                        <div key={t.id} onClick={() => moveTableTo(t.id)} className="pos-hover-row" style={{ minWidth: 56, padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E4E7EC", background: "#fff", fontSize: 15, fontWeight: 700, color: "#101828", cursor: "pointer", textAlign: "center" }}>
+                          {t.label}<div style={{ fontSize: 11, fontWeight: 500, color: "#98A2B3", marginTop: 2 }}>{t.seats}p</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 13, color: "#98A2B3" }}>Geen vrije tafels in {AREA_LABELS[a]}.</div>
+                  )}
+                </div>
+              ))}
+              <div onClick={() => patch({ showMoveModal: false })} style={{ marginTop: 8, height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#667085" }}>Sluiten</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Tafels samenvoegen modal ───── */}
+      {s.showMergeModal && (() => {
+        const others = s.tables.filter((t) => t.status === "occupied" && t.id !== at.id);
+        return (
+          <div style={overlay(0.45, 60)} onClick={() => patch({ showMergeModal: false })}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 480, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Samenvoegen met</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>Items van {tlabel(at)} worden toegevoegd aan de gekozen rekening.</div>
+              {others.length ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {others.map((t) => (
+                    <div key={t.id} onClick={() => mergeWithTable(t.id)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", borderRadius: 12, border: "1.5px solid #E4E7EC", background: "#fff", cursor: "pointer" }}>
+                      <div style={{ width: 44, height: 44, borderRadius: 11, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 800, flexShrink: 0 }}>{t.walkin ? (t.name || "?").slice(0, 2) : t.label}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{tlabel(t)}</div>
+                        <div style={{ fontSize: 12.5, color: "#667085" }}>{(t.walkin ? "Losse order" : (t.area === "bar" ? "Bar" : "Terras") + " · " + (t.guests || t.seats) + " gasten") + " · " + (t.orders || []).reduce((a, o) => a + o.qty, 0) + " items"}</div>
+                      </div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{fmt(tableTotal(t))}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ fontSize: 14, color: "#98A2B3", padding: "20px 0" }}>Geen andere bezette tafels om mee samen te voegen.</div>
+              )}
+              <div onClick={() => patch({ showMergeModal: false })} style={{ marginTop: 16, height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15, fontWeight: 600, color: "#667085" }}>Sluiten</div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Korting modal ───── */}
+      {s.showDiscountModal && (() => {
+        const current = s.tableDiscount[at.id] || 0;
+        const subtotal = tableTotal(at);
+        const options = [5, 10, 15, 20];
+        return (
+          <div style={overlay(0.45, 60)} onClick={() => patch({ showDiscountModal: false })}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 440, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 26, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 4 }}>Korting op de rekening</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>{tlabel(at)} · subtotaal {fmt(subtotal)}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 14 }}>
+                {options.map((p) => {
+                  const on = current === p;
+                  return (
+                    <div key={p} onClick={() => applyTableDiscount(p)} style={{ padding: "16px 0", borderRadius: 12, fontSize: 16, fontWeight: 700, cursor: "pointer", textAlign: "center", ...(on ? { background: PURPLE, color: "#fff", border: "1.5px solid " + PURPLE } : { background: "#fff", color: "#101828", border: "1.5px solid #E4E7EC" }) }}>{p}%</div>
+                  );
+                })}
+              </div>
+              {current > 0 && (
+                <div style={{ background: "#F4EBFF", borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600, color: "#6941C6" }}>{current}% korting</span>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: "#6941C6" }}>− {fmt(round2(subtotal * (current / 100)))}</span>
+                </div>
+              )}
+              <div style={{ display: "flex", gap: 12 }}>
+                <div onClick={() => applyTableDiscount(0)} style={{ flex: 1, height: 50, borderRadius: 12, border: "1.5px solid #E4E7EC", background: "#fff", color: current > 0 ? "#D92D20" : "#98A2B3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: current > 0 ? "pointer" : "default" }}>{current > 0 ? "Verwijderen" : "Geen korting"}</div>
+                <div onClick={() => patch({ showDiscountModal: false })} style={{ flex: 1, height: 50, borderRadius: 12, background: "#fff", border: "1.5px solid #E4E7EC", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Sluiten</div>
+              </div>
             </div>
           </div>
         );
