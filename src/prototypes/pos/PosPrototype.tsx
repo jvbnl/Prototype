@@ -1213,9 +1213,17 @@ export function PosPrototype() {
               <div className="pos-header-sub">{at.walkin ? "Losse order" : (at.guests || at.seats) + " gasten"}</div>
             </div>
             <div className="pos-header-side">
+              <div className="pos-btn pos-action-primary-btn" onClick={() => printInterimReceipt(at)}>
+                <PrintIcon size={16} />
+                <span className="pos-btn-label">Bon printen</span>
+              </div>
+              <div className="pos-btn pos-action-primary-btn" onClick={openNoteModal}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16M4 10h16M4 15h10" /></svg>
+                <span className="pos-btn-label">Notitie</span>
+              </div>
               <div className="pos-btn" onClick={openActions}>
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><circle cx="5" cy="12" r="1" fill="currentColor" /><circle cx="12" cy="12" r="1" fill="currentColor" /><circle cx="19" cy="12" r="1" fill="currentColor" /></svg>
-                <span className="pos-btn-label">Acties</span>
+                <span className="pos-btn-label">Meer</span>
               </div>
             </div>
           </div>
@@ -1811,18 +1819,20 @@ export function PosPrototype() {
                 <div style={{ fontSize: 18, fontWeight: 700 }}>Acties</div>
                 <div style={{ fontSize: 13, color: "#667085" }}>{tlabel(at)}</div>
               </div>
-              <ActionRow
-                icon={<PrintIcon size={18} />}
-                label="Bon printen"
-                sub="Tussenbon van de lopende rekening"
-                onClick={() => { closeActions(); printInterimReceipt(at); }}
-              />
-              <ActionRow
-                icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16M4 10h16M4 15h10" /></svg>}
-                label={hasNote ? "Notitie bewerken" : "Notitie toevoegen"}
-                sub={hasNote ? (s.tableNotes[at.id] || "").trim() : "Allergie, gelegenheid, betaalt apart…"}
-                onClick={openNoteModal}
-              />
+              <div className="pos-action-sheet-overflow-only">
+                <ActionRow
+                  icon={<PrintIcon size={18} />}
+                  label="Bon printen"
+                  sub="Tussenbon van de lopende rekening"
+                  onClick={() => { closeActions(); printInterimReceipt(at); }}
+                />
+                <ActionRow
+                  icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5h16M4 10h16M4 15h10" /></svg>}
+                  label={hasNote ? "Notitie bewerken" : "Notitie toevoegen"}
+                  sub={hasNote ? (s.tableNotes[at.id] || "").trim() : "Allergie, gelegenheid, betaalt apart…"}
+                  onClick={openNoteModal}
+                />
+              </div>
               <ActionRow
                 icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5" /></svg>}
                 label="Tafel verplaatsen"
