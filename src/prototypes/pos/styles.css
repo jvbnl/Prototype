@@ -439,6 +439,21 @@
   text-decoration: underline;
 }
 
+/* Day report (Dagoverzicht) layout */
+.pos-day-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.pos-day-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+.pos-day-row > * {
+  min-width: 0;
+}
+
 /* ─────────── Mobile ─────────── */
 @media (max-width: 900px) {
   .pos-order-body {
@@ -524,6 +539,13 @@
   .pos-twk-pill,
   .pos-twk-panel {
     bottom: 84px;
+  }
+  /* Day report stacks */
+  .pos-day-kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .pos-day-row {
+    flex-direction: column;
   }
 }
 
