@@ -993,7 +993,7 @@ export function PosPrototype() {
       {s.screen === "floor" && (
         <div className="pos-screen">
           <div className="pos-header">
-            <div className="pos-header-side" style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em" }}>
+            <div className="pos-header-side pos-floor-logo" style={{ fontSize: 19, fontWeight: 800, letterSpacing: "-0.01em" }}>
               {locationName === "Tree 11 Bar" ? (
                 <img src="/prototypes/pos/location-logo.svg" alt="Tree 11 Bar" style={{ height: 30, width: "auto", display: "block" }} />
               ) : (
@@ -1013,7 +1013,7 @@ export function PosPrototype() {
 
           <div className="pos-floor-subhead">
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13, fontWeight: 500, color: "#98A2B3" }}>Spring naar</span>
+              <span className="pos-jumpto-label" style={{ fontSize: 13, fontWeight: 500, color: "#98A2B3" }}>Spring naar</span>
               <div style={{ display: "flex", gap: 8 }}>
                 {AREA_ORDER.map((key) => (
                   <div key={key} onClick={() => jumpTo(key)} style={{ background: "#F2F4F7", border: "1px solid #EAECF0", borderRadius: 999, padding: "7px 15px", fontSize: 14, fontWeight: 600, color: "#344054", cursor: "pointer" }}>
@@ -1026,9 +1026,9 @@ export function PosPrototype() {
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#fff", border: "1.5px solid #E4E7EC" }} />} text={`${countFree} vrij`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#F4EBFF", border: "1.5px solid " + PURPLE }} />} text={`${countOcc} bezet`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#FFFBF4", border: "1.5px dashed #F79009" }} />} text={`${countRes} gereserveerd`} />
-              <div onClick={openResModal} style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
+              <div onClick={openResModal} className="pos-reserveer-btn" style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
-                Reserveren
+                <span className="pos-reserveer-label">Reserveren</span>
               </div>
             </div>
           </div>
