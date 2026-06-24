@@ -242,6 +242,22 @@
   background: #fee4e2;
 }
 
+/* ── Order-screen actions header (split: primary buttons + overflow) ── */
+/* On desktop / large tablet, the two most-used actions sit in the header;
+   the rest is under "⋯ Meer". On small tablet / phone, everything collapses
+   into the Meer sheet. */
+.pos-root .pos-action-sheet-overflow-only {
+  display: none;
+}
+@media (max-width: 900px) {
+  .pos-root .pos-action-primary-btn {
+    display: none !important;
+  }
+  .pos-root .pos-action-sheet-overflow-only {
+    display: block;
+  }
+}
+
 /* ── Cart bill line (tap-anywhere to edit, touch-optimised) ── */
 .pos-root .pos-bill-line {
   transition: background 0.1s ease;
