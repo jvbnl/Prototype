@@ -725,7 +725,7 @@ export function PosPrototype() {
     });
     const stationKeys = Object.keys(groups);
     const newTickets: Ticket[] = stationKeys.map((st, i) => ({ id: "k" + Date.now() + i, table: lbl, items: groups[st], status: "new", station: st as Station, createdAt: Date.now() }));
-    patch((st) => ({ tickets: st.tickets.concat(newTickets) }));
+    patch((st) => ({ tickets: st.tickets.concat(newTickets), screen: "floor", activeTableId: null, editingOid: null }));
     setCartSheetOpen(false);
     const dest = stationKeys.length > 1 ? "keuken & bar" : stationKeys[0] === "bar" ? "de bar" : "de keuken";
     setToast("Doorgestuurd naar " + dest);
