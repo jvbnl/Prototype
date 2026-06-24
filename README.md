@@ -5,6 +5,11 @@ A small gallery of self-contained prototypes shipped from Claude Design
 
 ## Available prototypes
 
+- **Gymly POS** (`#/pos`) — touch point-of-sale for hospitality: floor plan with
+  table statuses, an order screen with category-tinted products and a kitchen/bar
+  ticket, a kitchen display board, and an open-orders overview — plus reserve,
+  checkout and cancel flows. Fully responsive, with a mobile bottom-sheet cart and
+  swipeable kitchen columns.
 - **Deal Checkout** (`#/deal-checkout`) — standalone Gymly checkout with a deal
   state. Four variants (spotlight banner / hero replacement / summary integrated /
   dedicated deal card) plus a tweaks panel for variant, deal type, sender,
@@ -30,6 +35,7 @@ src/
     home.css            # gallery styles (injected when Home mounts)
   prototypes/
     registry.ts         # list of prototypes (slug, title, component)
+    pos/                # Gymly POS prototype + its styles.css
     billing/            # Gymly Billing prototype + its styles.css
     deal-checkout/      # Deal Checkout prototype + its styles.css
 ```
