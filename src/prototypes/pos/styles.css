@@ -176,38 +176,70 @@
 }
 
 /* ── Drawer count grid (start & end of shift) ── */
+/* Tap-to-add tile: tile = +1, the small minus button on it = −1. */
 .pos-root .pos-denom {
+  position: relative;
   background: #fff;
   border: 1px solid #eaecf0;
   border-radius: 14px;
-  padding: 10px 8px 12px;
+  padding: 12px 8px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  cursor: text;
+  justify-content: center;
+  gap: 4px;
+  min-height: 76px;
+  cursor: pointer;
+  user-select: none;
   box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+  transition: background 0.1s ease, border-color 0.1s ease, transform 0.06s ease;
 }
-.pos-root .pos-denom:focus-within {
+.pos-root .pos-denom:hover {
+  border-color: #d6bbfb;
+  background: #fcfaff;
+}
+.pos-root .pos-denom:active {
+  transform: scale(0.98);
+  background: #f4ebff;
   border-color: #7000ff;
-  box-shadow: 0 0 0 3px rgba(112, 0, 255, 0.12);
 }
 .pos-root .pos-denom-label {
   font-size: 12.5px;
   font-weight: 600;
   color: #667085;
 }
-.pos-root .pos-denom-input {
-  width: 100%;
-  border: none;
-  outline: none;
-  background: transparent;
-  text-align: center;
-  font-size: 22px;
+.pos-root .pos-denom-count {
+  font-size: 24px;
   font-weight: 800;
+  line-height: 1;
+}
+/* The − button overlays the tile's top-right corner and is its own tap target. */
+.pos-root .pos-denom-minus {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1px solid #fecdca;
+  background: #fff;
+  color: #b42318;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
   padding: 0;
-  -moz-appearance: textfield;
+  transition: background 0.1s ease, transform 0.06s ease;
+}
+.pos-root .pos-denom-minus:hover {
+  background: #fef3f2;
+}
+.pos-root .pos-denom-minus:active {
+  transform: scale(0.9);
+  background: #fee4e2;
 }
 
 /* ── Cart bill line (tap-anywhere to edit, touch-optimised) ── */
@@ -657,11 +689,6 @@
     display: none;
   }
   .pos-oo-wait {
-    display: none !important;
-  }
-  /* The floor screen drops the location logo on phone — the action buttons
-     (Orders / Keuken / Nieuw order / menu) need the room. */
-  .pos-floor-logo {
     display: none !important;
   }
   /* The "Spring naar" caption is implicit on mobile — the Bar / Terras pills
