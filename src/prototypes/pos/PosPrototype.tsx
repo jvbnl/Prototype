@@ -164,63 +164,65 @@ const PRODUCTS: Product[] = [
 interface ModOption { id: string; label: string; price: number }
 interface ModGroup { id: string; label: string; type: "single" | "multi"; required?: boolean; defaultId?: string; options: ModOption[] }
 
+// Variants carry no surcharge and no group is required — they only capture
+// the guest's choice (kitchen instruction), not a price change.
 const MODS_BY_CAT: Record<string, ModGroup[]> = {
   koffie: [
-    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "m", options: [
-      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 0.6 },
+    { id: "maat", label: "Maat", type: "single", defaultId: "m", options: [
+      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 0 },
     ] },
     { id: "melk", label: "Melk", type: "single", defaultId: "vol", options: [
       { id: "vol", label: "Volle melk", price: 0 }, { id: "half", label: "Halfvolle melk", price: 0 },
-      { id: "haver", label: "Haver", price: 0.5 }, { id: "soja", label: "Soja", price: 0.5 }, { id: "lf", label: "Lactosevrij", price: 0.5 },
+      { id: "haver", label: "Haver", price: 0 }, { id: "soja", label: "Soja", price: 0 }, { id: "lf", label: "Lactosevrij", price: 0 },
     ] },
     { id: "extra", label: "Extra's", type: "multi", options: [
-      { id: "shot", label: "Extra shot", price: 0.5 }, { id: "vanille", label: "Vanille siroop", price: 0.5 },
-      { id: "caramel", label: "Caramel siroop", price: 0.5 }, { id: "hazel", label: "Hazelnoot siroop", price: 0.5 },
-      { id: "slag", label: "Slagroom", price: 0.5 }, { id: "decaf", label: "Decaf", price: 0 },
+      { id: "shot", label: "Extra shot", price: 0 }, { id: "vanille", label: "Vanille siroop", price: 0 },
+      { id: "caramel", label: "Caramel siroop", price: 0 }, { id: "hazel", label: "Hazelnoot siroop", price: 0 },
+      { id: "slag", label: "Slagroom", price: 0 }, { id: "decaf", label: "Decaf", price: 0 },
     ] },
   ],
   frisdrank: [
     { id: "formaat", label: "Formaat", type: "single", defaultId: "blik", options: [
-      { id: "blik", label: "Blikje", price: 0 }, { id: "fles", label: "Flesje", price: 0.5 },
+      { id: "blik", label: "Blikje", price: 0 }, { id: "fles", label: "Flesje", price: 0 },
     ] },
     { id: "ijs", label: "IJs", type: "single", defaultId: "met", options: [
       { id: "met", label: "Met ijs", price: 0 }, { id: "zonder", label: "Zonder ijs", price: 0 },
     ] },
   ],
   shakes: [
-    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "m", options: [
-      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 1.0 },
+    { id: "maat", label: "Maat", type: "single", defaultId: "m", options: [
+      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 0 },
     ] },
     { id: "basis", label: "Melkbasis", type: "single", defaultId: "vol", options: [
-      { id: "vol", label: "Volle melk", price: 0 }, { id: "haver", label: "Haver", price: 0.5 }, { id: "amandel", label: "Amandel", price: 0.5 },
+      { id: "vol", label: "Volle melk", price: 0 }, { id: "haver", label: "Haver", price: 0 }, { id: "amandel", label: "Amandel", price: 0 },
     ] },
     { id: "boost", label: "Boosts", type: "multi", options: [
-      { id: "prot", label: "Proteïne schep", price: 1.5 }, { id: "pb", label: "Pindakaas", price: 0.75 },
+      { id: "prot", label: "Proteïne schep", price: 0 }, { id: "pb", label: "Pindakaas", price: 0 },
     ] },
   ],
   broodjes: [
-    { id: "brood", label: "Brood", type: "single", required: true, defaultId: "bruin", options: [
+    { id: "brood", label: "Brood", type: "single", defaultId: "bruin", options: [
       { id: "bruin", label: "Bruin", price: 0 }, { id: "wit", label: "Wit", price: 0 }, { id: "zuur", label: "Zuurdesem", price: 0 }, { id: "bagel", label: "Bagel", price: 0 },
     ] },
     { id: "toast", label: "Getoast", type: "single", defaultId: "niet", options: [
       { id: "niet", label: "Niet getoast", price: 0 }, { id: "wel", label: "Getoast", price: 0 },
     ] },
     { id: "extra", label: "Extra's", type: "multi", options: [
-      { id: "kaas", label: "Kaas", price: 1.0 }, { id: "avo", label: "Avocado", price: 1.5 }, { id: "ei", label: "Ei", price: 1.0 }, { id: "bacon", label: "Bacon", price: 1.5 },
+      { id: "kaas", label: "Kaas", price: 0 }, { id: "avo", label: "Avocado", price: 0 }, { id: "ei", label: "Ei", price: 0 }, { id: "bacon", label: "Bacon", price: 0 },
     ] },
   ],
   bowls: [
-    { id: "basis", label: "Basis", type: "single", required: true, defaultId: "rijst", options: [
+    { id: "basis", label: "Basis", type: "single", defaultId: "rijst", options: [
       { id: "rijst", label: "Rijst", price: 0 }, { id: "quinoa", label: "Quinoa", price: 0 }, { id: "groen", label: "Groene mix", price: 0 },
     ] },
-    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "reg", options: [
-      { id: "reg", label: "Regulier", price: 0 }, { id: "groot", label: "Groot", price: 2.0 },
+    { id: "maat", label: "Maat", type: "single", defaultId: "reg", options: [
+      { id: "reg", label: "Regulier", price: 0 }, { id: "groot", label: "Groot", price: 0 },
     ] },
     { id: "eiwit", label: "Eiwit", type: "multi", options: [
-      { id: "kip", label: "Kip", price: 2.5 }, { id: "zalm", label: "Zalm", price: 3.5 }, { id: "tofu", label: "Tofu", price: 2.0 },
+      { id: "kip", label: "Kip", price: 0 }, { id: "zalm", label: "Zalm", price: 0 }, { id: "tofu", label: "Tofu", price: 0 },
     ] },
     { id: "top", label: "Toppings", type: "multi", options: [
-      { id: "avo", label: "Avocado", price: 1.5 }, { id: "dressing", label: "Extra dressing", price: 0.5 },
+      { id: "avo", label: "Avocado", price: 0 }, { id: "dressing", label: "Extra dressing", price: 0 },
     ] },
   ],
 };
@@ -2243,7 +2245,7 @@ export function PosPrototype() {
             <div onClick={stop} style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100dvh - 32px)", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 24, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease", overflow: "hidden" }}>
               <div style={{ flexShrink: 0, padding: "22px 24px 14px", borderBottom: "1px solid #F2F4F7" }}>
                 <div style={{ fontSize: 20, fontWeight: 800 }}>{p.name}</div>
-                <div style={{ fontSize: 14, color: "#667085", marginTop: 2 }}>Vanaf {fmt(p.price)} · kies je opties</div>
+                <div style={{ fontSize: 14, color: "#667085", marginTop: 2 }}>{fmt(p.price)} · kies je opties</div>
               </div>
               <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 16px" }}>
                 {groups.map((g) => (
