@@ -1544,16 +1544,16 @@ export function PosPrototype() {
                 <div className="pos-product-grid">
                   {(s.activeCat === "alles" ? PRODUCTS : PRODUCTS.filter((p) => p.cat === s.activeCat)).map((p) => productImagesOn && p.image ? (
                     <div key={p.id} className="pos-tile" onClick={() => openProduct(p)} style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, height: 184, display: "flex", flexDirection: "column", cursor: "pointer", userSelect: "none", boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
-                      <div style={{ position: "relative", flex: 1, background: catTint(p.cat) }}>
+                      <div style={{ position: "relative", height: 124, flexShrink: 0, background: catTint(p.cat), overflow: "hidden" }}>
                         <img
                           src={p.image}
                           alt={p.name}
                           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
-                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
                         />
                         {productMods(p).length > 0 && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 11, fontWeight: 600, color: "#6941C6", background: "rgba(255,255,255,0.92)", borderRadius: 6, padding: "2px 6px" }}>opties</span>}
                       </div>
-                      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+                      <div style={{ height: 60, flexShrink: 0, padding: "0 12px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 2 }}>
                         <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2, color: "#101828", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "#475467" }}>{fmt(p.price)}</span>
                       </div>
