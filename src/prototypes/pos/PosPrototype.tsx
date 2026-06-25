@@ -2372,158 +2372,127 @@ export function PosPrototype() {
         );
       })()}
 
-      {/* ───── Guided onboarding tour ───── */}
+      {/* ───── Guided onboarding tour (Airbnb-style split layout, 2 steps) ───── */}
       {tourStep != null && (() => {
-        const total = 4;
+        const total = 2;
         const next = () => setTourStep((s) => (s == null ? null : s + 1 < total ? s + 1 : null));
         const prev = () => setTourStep((s) => (s == null ? null : Math.max(0, s - 1)));
         const close = () => setTourStep(null);
-        const Dots = () => (
-          <div style={{ display: "flex", gap: 6 }}>
+        const isLast = tourStep === total - 1;
+        // Progress bars at the foot (Airbnb pattern: small filled / empty bars)
+        const Bars = () => (
+          <div style={{ display: "flex", gap: 4, flex: 1 }}>
             {Array.from({ length: total }).map((_, i) => (
-              <span key={i} style={{ width: i === tourStep ? 22 : 7, height: 7, borderRadius: 999, background: i <= tourStep ? PURPLE : "#E4E7EC", transition: "width 0.2s ease, background 0.2s ease" }} />
+              <span key={i} style={{ flex: 1, height: 3, borderRadius: 999, background: i <= tourStep ? "#101828" : "#E4E7EC", transition: "background 0.2s ease" }} />
             ))}
           </div>
         );
-        const Visual = ({ children, bg }: { children: ReactNode; bg: string }) => (
-          <div style={{ height: 168, borderRadius: 18, background: bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22, position: "relative", overflow: "hidden" }}>{children}</div>
-        );
-        const Bullet = ({ icon, label, sub }: { icon: ReactNode; label: string; sub: string }) => (
-          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#F4EBFF", color: PURPLE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: "#101828" }}>{label}</div>
-              <div style={{ fontSize: 13.5, color: "#667085", marginTop: 2 }}>{sub}</div>
-            </div>
-          </div>
-        );
-        let title = "", sub = "", visual: ReactNode = null, body: ReactNode = null;
+        let left: ReactNode = null;
+        let right: ReactNode = null;
         if (tourStep === 0) {
-          title = "Welkom bij je nieuwe POS";
-          sub = "Een snelle rondleiding door de belangrijkste flows. Twee minuten — overslaan kan altijd.";
-          visual = (
-            <Visual bg="linear-gradient(135deg, #F4EBFF 0%, #E0EAFF 100%)">
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                <div style={{ width: 64, height: 64, borderRadius: 18, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 24px rgba(112,0,255,0.3)" }}>
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" /></svg>
+          left = (
+            <>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Welkom</div>
+                <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15, marginBottom: 16, color: "#101828" }}>Maak kennis met je nieuwe POS</div>
+                <div style={{ fontSize: 16, color: "#475467", lineHeight: 1.55 }}>
+                  Sneller aanslaan, sluitende kassa-discipline en een volledig overzicht — in één touch-vriendelijke interface, ontworpen voor hospitality.
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#6941C6" }}>Point of Sale · v1</div>
               </div>
-            </Visual>
+            </>
           );
-          body = (
-            <div>
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>} label="Snel aanslaan" sub="Tap producten, kies opties, Submit terug naar de vloer." />
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></svg>} label="Kassa-discipline" sub="Begin en eindig je dienst met een geteld startgeld en kasverschil." />
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>} label="Volledig overzicht" sub="Open orders, kassa-status en dagrapport altijd binnen handbereik." />
-            </div>
+          right = (
+            <div style={{ position: "absolute", inset: 0, backgroundImage: `url(https://images.unsplash.com/photo-1559925393-8be0ec4767c8?w=800&h=900&fit=crop&q=80&auto=format)`, backgroundSize: "cover", backgroundPosition: "center", background: "linear-gradient(135deg, #F4EBFF 0%, #E0EAFF 100%)" }} />
           );
-        } else if (tourStep === 1) {
-          title = "Begin en eindig je dienst";
-          sub = "Drie korte stappen: kassa kiezen, jezelf koppelen, startgeld tellen.";
-          visual = (
-            <Visual bg="#F9FAFB">
-              <div style={{ display: "flex", gap: 10 }}>
-                {[
-                  { n: "1", l: "Kassa" },
-                  { n: "2", l: "Cashier" },
-                  { n: "3", l: "Tellen" },
-                ].map((s, i) => (
-                  <div key={s.n} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 84, padding: "12px 10px", background: "#fff", border: "1.5px solid " + (i === 2 ? PURPLE : "#E4E7EC"), borderRadius: 14, textAlign: "center", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: i === 2 ? PURPLE : "#F4EBFF", color: i === 2 ? "#fff" : "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, margin: "0 auto 6px" }}>{s.n}</div>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#101828" }}>{s.l}</div>
-                    </div>
-                    {i < 2 && <span style={{ color: "#D0D5DD", fontSize: 18 }}>→</span>}
-                  </div>
-                ))}
-              </div>
-            </Visual>
-          );
-          body = (
-            <div>
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2" /></svg>} label="Kassa overzicht" sub="Zie status per kassa en sluit een dienst remote als iemand vergeet af te melden." />
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>} label="Koppel medewerker" sub="Zoek of selecteer een cashier — alle transacties worden toegerekend." />
-              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18v10H3z" /><path d="M7 7v10M17 7v10" /></svg>} label="Lade tellen" sub="Tap-to-add per denominatie, met live totaal en kasverschil bij sluiten." />
-            </div>
-          );
-        } else if (tourStep === 2) {
-          title = "Hoe wil je producten zien?";
-          sub = "Kies wat het beste werkt voor jullie team. Je kunt later altijd switchen.";
-          body = (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>
-              {([
-                { v: false, t: "Kleurcodering", d: "Snel scannen op categorie — werkt goed voor ervaren teams." },
-                { v: true, t: "Afbeeldingen", d: "Visueel rijker — handig voor nieuw personeel of grote menukaarten." },
-              ] as const).map((opt) => {
-                const on = productImagesOn === opt.v;
-                return (
-                  <div key={String(opt.v)} onClick={() => setProductImagesOn(opt.v)} className="pos-hover-row" style={{ cursor: "pointer", border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", borderRadius: 16, padding: 14 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
-                      {opt.v ? (
-                        ["1495474472287-4d71bcdd2085", "1554866585-cd94860890b7", "1539252554453-80ab65ce3586", "1546069901-ba9599a7e63c"].map((id) => (
-                          <div key={id} style={{ height: 44, borderRadius: 8, backgroundImage: `url(https://images.unsplash.com/photo-${id}?w=160&h=160&fit=crop&q=70&auto=format)`, backgroundSize: "cover", backgroundPosition: "center", background: "#F2ECE3" }} />
-                        ))
-                      ) : (
-                        [
-                          { tint: "#F2ECE3" }, { tint: "#E9F0FA" }, { tint: "#FAF1E1" }, { tint: "#E2F1EF" },
-                        ].map((t, i) => (
-                          <div key={i} style={{ height: 44, borderRadius: 8, background: t.tint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#6941C6" }}>Aa</div>
-                        ))
-                      )}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (on ? PURPLE : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        {on && <span style={{ width: 9, height: 9, borderRadius: "50%", background: PURPLE }} />}
-                      </span>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>{opt.t}</div>
-                    </div>
-                    <div style={{ fontSize: 12.5, color: "#667085", marginTop: 4 }}>{opt.d}</div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        } else if (tourStep === 3) {
-          title = "Je bent klaar om te beginnen";
-          sub = "Alle instellingen, modi en feature flags zijn altijd terug te vinden via de Tweaks-pil rechtsonder.";
-          visual = (
-            <Visual bg="linear-gradient(135deg, #ECFDF3 0%, #F4EBFF 100%)">
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#12B76A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 28px rgba(18,183,106,0.3)" }}>
-                  <CheckIcon size={36} />
+        } else {
+          left = (
+            <>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#98A2B3", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>Productweergave</div>
+                <div style={{ fontSize: 30, fontWeight: 800, lineHeight: 1.15, marginBottom: 12, color: "#101828" }}>Hoe wil je producten zien?</div>
+                <div style={{ fontSize: 15, color: "#475467", lineHeight: 1.55, marginBottom: 22 }}>
+                  Kies wat het beste werkt voor jullie team. Je kunt later altijd switchen via Tweaks.
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#067647" }}>Tour voltooid</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {([
+                    { v: false, t: "Kleurcodering", d: "Snel scannen op categorie. Werkt goed voor ervaren teams." },
+                    { v: true, t: "Afbeeldingen", d: "Visueel rijker. Handig voor nieuw personeel of grote menukaarten." },
+                  ] as const).map((opt) => {
+                    const on = productImagesOn === opt.v;
+                    return (
+                      <div key={String(opt.v)} onClick={() => setProductImagesOn(opt.v)} className="pos-hover-row" style={{ cursor: "pointer", border: "1.5px solid " + (on ? "#101828" : "#E4E7EC"), background: "#fff", borderRadius: 14, padding: "14px 16px", display: "flex", alignItems: "center", gap: 14 }}>
+                        <span style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid " + (on ? "#101828" : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {on && <span style={{ width: 11, height: 11, borderRadius: "50%", background: "#101828" }} />}
+                        </span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{opt.t}</div>
+                          <div style={{ fontSize: 13, color: "#667085", marginTop: 1 }}>{opt.d}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </Visual>
+            </>
           );
-          body = (
-            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "12px 14px", fontSize: 13.5, color: "#475467", display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ width: 28, height: 28, borderRadius: 8, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 800 }}>⚙</span>
-              <span>Onboarding kun je later opnieuw bekijken vanuit het Tweaks-paneel.</span>
+          right = (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: productImagesOn ? "linear-gradient(135deg, #F2ECE3 0%, #FBEAF1 100%)" : "linear-gradient(135deg, #F4EBFF 0%, #E0EAFF 100%)", padding: 36, transition: "background 0.3s ease" }}>
+              <div style={{ width: "100%", maxWidth: 320, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                {productImagesOn ? (
+                  [
+                    { id: "1572442388796-11668a67e53d", name: "Cappuccino", price: "€3,40" },
+                    { id: "1554866585-cd94860890b7", name: "Cola", price: "€3,00" },
+                    { id: "1539252554453-80ab65ce3586", name: "Broodje", price: "€5,50" },
+                    { id: "1546069901-ba9599a7e63c", name: "Poke bowl", price: "€11,50" },
+                  ].map((p) => (
+                    <div key={p.id} style={{ background: "#fff", borderRadius: 14, overflow: "hidden", boxShadow: "0 6px 20px rgba(16,24,40,0.1)" }}>
+                      <div style={{ height: 78, backgroundImage: `url(https://images.unsplash.com/photo-${p.id}?w=200&h=200&fit=crop&q=70&auto=format)`, backgroundSize: "cover", backgroundPosition: "center" }} />
+                      <div style={{ padding: "8px 10px" }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: "#101828", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#475467", marginTop: 1 }}>{p.price}</div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  [
+                    { tint: "#F2ECE3", name: "Cappuccino", price: "€3,40" },
+                    { tint: "#E9F0FA", name: "Cola", price: "€3,00" },
+                    { tint: "#FAF1E1", name: "Broodje", price: "€5,50" },
+                    { tint: "#E2F1EF", name: "Poke bowl", price: "€11,50" },
+                  ].map((p, i) => (
+                    <div key={i} style={{ background: p.tint, borderRadius: 14, padding: 12, height: 96, display: "flex", flexDirection: "column", justifyContent: "space-between", boxShadow: "0 6px 20px rgba(16,24,40,0.08)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#101828" }}>{p.name}</div>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "#475467" }}>{p.price}</div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           );
         }
-        const isLast = tourStep === total - 1;
         return (
           <div style={overlay(0.55, 70)} onClick={close}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 540, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
-                <Dots />
-                <div onClick={close} className="pos-icon-btn" title="Overslaan" style={{ width: 32, height: 32, fontSize: 18 }}>{"✕"}</div>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 880, maxHeight: "calc(100dvh - 40px)", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 16, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .2s ease", overflow: "hidden" }}>
+              <div style={{ display: "flex", alignItems: "stretch", flex: 1, minHeight: 480, position: "relative" }}>
+                <div style={{ flex: 1, padding: "44px 44px 32px", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
+                  <button onClick={close} aria-label="Sluiten" style={{ position: "absolute", top: 18, left: 18, width: 32, height: 32, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#101828", padding: 0 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                  </button>
+                  {left}
+                </div>
+                <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#F2F4F7" }}>{right}</div>
               </div>
-              {visual}
-              <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>{title}</div>
-              <div style={{ fontSize: 14.5, color: "#667085", marginBottom: 18, lineHeight: 1.5 }}>{sub}</div>
-              {body}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 26 }}>
-                {tourStep > 0 ? (
-                  <div onClick={prev} style={{ fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer", padding: "8px 0" }}>← Vorige</div>
-                ) : (
-                  <div onClick={close} style={{ fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer", padding: "8px 0" }}>Overslaan</div>
-                )}
-                <div onClick={isLast ? close : next} style={{ height: 50, padding: "0 26px", borderRadius: 13, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-                  {isLast ? "Aan de slag" : "Volgende"}
+              <div style={{ flexShrink: 0, padding: "16px 28px 20px", borderTop: "1px solid #EAECF0", display: "flex", alignItems: "center", gap: 20 }}>
+                <Bars />
+                <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+                  {tourStep > 0 ? (
+                    <div onClick={prev} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Vorige</div>
+                  ) : (
+                    <div onClick={close} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Overslaan</div>
+                  )}
+                  <div onClick={isLast ? close : next} style={{ height: 44, padding: "0 22px", borderRadius: 10, background: "#101828", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                    {isLast ? "Aan de slag" : "Volgende"}
+                  </div>
                 </div>
               </div>
             </div>
