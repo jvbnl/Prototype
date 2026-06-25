@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { BillingPrototype } from "./billing/BillingPrototype";
 import { DealCheckoutPrototype } from "./deal-checkout/DealCheckoutPrototype";
+import { FamilyPrototype } from "./family/FamilyPrototype";
 import { PosPrototype } from "./pos/PosPrototype";
 
 export type PrototypeMeta = {
@@ -43,6 +44,16 @@ export const PROTOTYPES: PrototypeMeta[] = [
     tags: ["Billing", "Settings", "Wireframe"],
     accent: "#1a1a1a",
     component: BillingPrototype,
+  },
+  {
+    slug: "family",
+    title: "Family accounts",
+    tagline: "Linked members on one main account",
+    description:
+      "Member detail screen with the \"Add family member\" flow: link an existing member or create a new one, with relation and billing (IBAN, billing email) inherited from the hoofdaccount. Adding a member promotes the main account, reveals the family-group switcher, logs an activity entry and fires a toast. Seed the family size and open overlays from the tweaks panel.",
+    tags: ["Customers", "Family", "Flow"],
+    accent: "#7A3FF2",
+    component: FamilyPrototype,
   },
 ];
 
