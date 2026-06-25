@@ -68,6 +68,11 @@ interface PosState {
   shiftOpen: boolean;
   activeStaff: string;
   selectedCounter: string | null;
+  // Per-counter shift state: which counters are currently in use, and by whom.
+  // A counter that's in use can't be selected for a new shift; instead the
+  // overview offers a "Sluiten" action to release it (manager override).
+  counterStatus: Record<string, "available" | "inuse">;
+  counterStaff: Record<string, string>;
   cashierQuery: string;
   selectedCashier: string | null;
   startCounts: CashCounts;
@@ -303,6 +308,8 @@ function makeInitialState(): PosState {
     shiftOpen: false,
     activeStaff: "Joel",
     selectedCounter: COUNTERS.length === 1 ? COUNTERS[0].id : null,
+    counterStatus: { c1: "inuse" }, // demo seed: Kassa Bar in gebruik door Sophie
+    counterStaff: { c1: "Sophie" },
     cashierQuery: "",
     selectedCashier: null,
     startCounts: { "50": 1, "20": 2, "10": 1 }, // tidy €100 opening float
@@ -550,6 +557,8 @@ export function PosPrototype() {
   const [posMode, setPosMode] = useState<"table" | "counter">("table");
   // Feature flag: reservations are out of scope for v1, off by default.
   const [reservationsOn, setReservationsOn] = useState(false);
+  // Feature flag: kitchen / KDS is out of scope for v1, off by default.
+  const [kitchenOn, setKitchenOn] = useState(false);
   const [counterSeq, setCounterSeq] = useState(0);
   const [s, setS] = useState<PosState>(makeInitialState);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
@@ -610,9 +619,24 @@ export function PosPrototype() {
 
   // ── Shift start flow: counter → cashier → tellen (count) ──
   const firstShiftScreen = (): Screen => (COUNTERS.length > 1 ? "counter" : "cashier");
-  const selectCounter = (id: string) => patch({ selectedCounter: id });
+  const selectCounter = (id: string) => {
+    if (s.counterStatus[id] === "inuse") return; // can't pick a counter that's in use
+    patch({ selectedCounter: id });
+  };
+  const closeCounter = (id: string) => {
+    const nm = s.counterStaff[id];
+    patch((st) => {
+      const status = { ...st.counterStatus, [id]: "available" as const };
+      const staff = { ...st.counterStaff }; delete staff[id];
+      const next: Partial<PosState> = { counterStatus: status, counterStaff: staff };
+      // If the active session is the one we just force-closed, drop it.
+      if (st.selectedCounter === id) next.selectedCounter = null;
+      return next;
+    });
+    setToast("Kassa gesloten" + (nm ? " · was " + nm : ""));
+  };
   const confirmCounter = () => {
-    if (!s.selectedCounter) return;
+    if (!s.selectedCounter || s.counterStatus[s.selectedCounter] === "inuse") return;
     patch({ screen: "cashier" });
   };
   const selectCashier = (name: string) => patch({ selectedCashier: name });
@@ -624,8 +648,16 @@ export function PosPrototype() {
   const setStartCount = (key: string, n: number) => patch((st) => ({ startCounts: { ...st.startCounts, [key]: n } }));
   const confirmStart = () => {
     const nm = s.selectedCashier || s.activeStaff;
+    const counterId = s.selectedCounter;
     setCartSheetOpen(false);
-    patch({ shiftOpen: true, activeStaff: nm, screen: "floor", cashierQuery: "" });
+    patch((st) => ({
+      shiftOpen: true,
+      activeStaff: nm,
+      screen: "floor",
+      cashierQuery: "",
+      counterStatus: counterId ? { ...st.counterStatus, [counterId]: "inuse" as const } : st.counterStatus,
+      counterStaff: counterId ? { ...st.counterStaff, [counterId]: nm } : st.counterStaff,
+    }));
     if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     setToast("Dienst gestart · " + nm);
   };
@@ -633,14 +665,22 @@ export function PosPrototype() {
   const beginEndShift = () => patch({ showUserMenu: false, screen: "end", endCounts: {} });
   const confirmEnd = () => {
     const nm = s.activeStaff;
+    const counterId = s.selectedCounter;
     setCartSheetOpen(false);
-    patch({
-      shiftOpen: false,
-      screen: firstShiftScreen(),
-      selectedCounter: COUNTERS.length === 1 ? COUNTERS[0].id : null,
-      selectedCashier: null,
-      cashierQuery: "",
-      endCounts: {},
+    patch((st) => {
+      const status = { ...st.counterStatus };
+      const staff = { ...st.counterStaff };
+      if (counterId) { status[counterId] = "available"; delete staff[counterId]; }
+      return {
+        shiftOpen: false,
+        screen: firstShiftScreen(),
+        selectedCounter: COUNTERS.length === 1 ? COUNTERS[0].id : null,
+        selectedCashier: null,
+        cashierQuery: "",
+        endCounts: {},
+        counterStatus: status,
+        counterStaff: staff,
+      };
     });
     setToast("Dienst afgesloten · " + nm);
   };
@@ -912,7 +952,7 @@ export function PosPrototype() {
     setCartSheetOpen(false);
     if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     const dest = stationKeys.length > 1 ? "keuken & bar" : stationKeys[0] === "bar" ? "de bar" : "de keuken";
-    setToast("Doorgestuurd naar " + dest);
+    setToast(kitchenOn ? "Doorgestuurd naar " + dest : "Order opgeslagen");
   };
   const advanceTicket = (id: string) =>
     patch((st) => ({
@@ -1160,13 +1200,13 @@ export function PosPrototype() {
       {countOcc > 0 && <span className="pos-badge" style={{ background: PURPLE }}>{countOcc}</span>}
     </div>
   );
-  const KitchenButton = () => (
+  const KitchenButton = () => kitchenOn ? (
     <div className="pos-btn" onClick={goKitchen}>
       <KitchenIcon />
       <span className="pos-btn-label">Keuken</span>
       {kitchenBadge > 0 && <span className="pos-badge" style={{ background: "#F79009" }}>{kitchenBadge}</span>}
     </div>
-  );
+  ) : null;
 
   function BillLine({ o }: { o: OrderLine }) {
     const editing = s.editingOid === o.oid;
@@ -1227,25 +1267,46 @@ export function PosPrototype() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22 }}>
                 {COUNTERS.map((c) => {
                   const on = s.selectedCounter === c.id;
+                  const inuse = s.counterStatus[c.id] === "inuse";
+                  const staff = s.counterStaff[c.id];
                   return (
                     <div
                       key={c.id}
-                      onClick={() => selectCounter(c.id)}
-                      className="pos-hover-row"
-                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14, border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", cursor: "pointer", minHeight: 60 }}
+                      onClick={() => !inuse && selectCounter(c.id)}
+                      className={inuse ? undefined : "pos-hover-row"}
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14, border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", cursor: inuse ? "default" : "pointer", minHeight: 60, opacity: inuse ? 0.85 : 1 }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 16, fontWeight: 700, color: "#101828" }}>{c.name}</div>
-                        <div style={{ fontSize: 13, color: "#667085" }}>{locationName}</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 16, fontWeight: 700, color: "#101828" }}>{c.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: "2px 8px", borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.04em", ...(inuse ? { background: "#FEF0C7", color: "#B54708" } : { background: "#ECFDF3", color: "#067647" }) }}>
+                            {inuse ? "In gebruik" : "Beschikbaar"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 13, color: "#667085", marginTop: 2 }}>{inuse && staff ? "Open door " + staff + " · " + locationName : locationName}</div>
                       </div>
-                      <span style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid " + (on ? PURPLE : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        {on && <span style={{ width: 11, height: 11, borderRadius: "50%", background: PURPLE }} />}
-                      </span>
+                      {inuse ? (
+                        <div
+                          onClick={(e) => { e.stopPropagation(); closeCounter(c.id); }}
+                          className="pos-hover-row"
+                          style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 10, border: "1px solid #FECDCA", color: "#B42318", background: "#fff", fontSize: 13.5, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                          Sluiten
+                        </div>
+                      ) : (
+                        <span style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid " + (on ? PURPLE : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          {on && <span style={{ width: 11, height: 11, borderRadius: "50%", background: PURPLE }} />}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
               </div>
-              <div onClick={confirmCounter} style={{ height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(s.selectedCounter ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Volgende</div>
+              {(() => {
+                const ok = s.selectedCounter && s.counterStatus[s.selectedCounter] !== "inuse";
+                return <div onClick={confirmCounter} style={{ height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(ok ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Volgende</div>;
+              })()}
             </div>
           </div>
         </div>
@@ -1558,7 +1619,7 @@ export function PosPrototype() {
       )}
 
       {/* ───── Kitchen ───── */}
-      {s.screen === "kitchen" && (
+      {s.screen === "kitchen" && kitchenOn && (
         <div className="pos-screen">
           <div className="pos-header">
             <div className="pos-header-side">
@@ -2298,6 +2359,11 @@ export function PosPrototype() {
         setStaffName={setStaffName}
         reservationsOn={reservationsOn}
         setReservationsOn={setReservationsOn}
+        kitchenOn={kitchenOn}
+        setKitchenOn={(v) => {
+          setKitchenOn(v);
+          if (!v && s.screen === "kitchen") patch({ screen: "floor" });
+        }}
         posMode={posMode}
         setPosMode={(m) => {
           setPosMode(m);
@@ -2742,6 +2808,8 @@ function PosTweaks({
   setStaffName,
   reservationsOn,
   setReservationsOn,
+  kitchenOn,
+  setKitchenOn,
   posMode,
   setPosMode,
   onReset,
@@ -2752,6 +2820,8 @@ function PosTweaks({
   setLocationName: (v: string) => void;
   staffName: string;
   setStaffName: (v: string) => void;
+  kitchenOn: boolean;
+  setKitchenOn: (v: boolean) => void;
   reservationsOn: boolean;
   setReservationsOn: (v: boolean) => void;
   posMode: "table" | "counter";
@@ -2779,10 +2849,17 @@ function PosTweaks({
           ))}
         </div>
 
-        <div className="pos-twk-sect">Features</div>
+        <div className="pos-twk-sect">Features · Reserveringen</div>
         <div className="pos-twk-seg">
-          {([[false, "Reserveringen uit"], [true, "Aan"]] as const).map(([v, label]) => (
-            <button key={String(v)} className={reservationsOn === v ? "on" : ""} onClick={() => setReservationsOn(v)}>{label}</button>
+          {([[false, "Uit"], [true, "Aan"]] as const).map(([v, label]) => (
+            <button key={"res" + String(v)} className={reservationsOn === v ? "on" : ""} onClick={() => setReservationsOn(v)}>{label}</button>
+          ))}
+        </div>
+
+        <div className="pos-twk-sect">Features · Keuken</div>
+        <div className="pos-twk-seg">
+          {([[false, "Uit"], [true, "Aan"]] as const).map(([v, label]) => (
+            <button key={"kit" + String(v)} className={kitchenOn === v ? "on" : ""} onClick={() => setKitchenOn(v)}>{label}</button>
           ))}
         </div>
 
