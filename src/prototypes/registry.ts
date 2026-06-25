@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import { BillingPrototype } from "./billing/BillingPrototype";
 import { DealCheckoutPrototype } from "./deal-checkout/DealCheckoutPrototype";
 import { FamilyPrototype } from "./family/FamilyPrototype";
+import { OnboardingPrototype } from "./onboarding/OnboardingPrototype";
 import { PosPrototype } from "./pos/PosPrototype";
 
 export type PrototypeMeta = {
@@ -15,6 +16,16 @@ export type PrototypeMeta = {
 };
 
 export const PROTOTYPES: PrototypeMeta[] = [
+  {
+    slug: "onboarding",
+    title: "Guided onboarding",
+    tagline: "Reusable activation patterns + POS example",
+    description:
+      "Reusable, design-system-native onboarding patterns — intro-modal (welcome / preference / choice), spotlight coachmark tour, success-toast, launcher with help-hub, and a setup checklist — with the new POS-flow as the reference integration. The tour engine anchors to real DOM nodes (data-tour-id), auto-flips placement, repositions on resize/scroll, and is keyboard- and focus-trap-accessible. A \"Componenten\" gallery documents each building block.",
+    tags: ["Onboarding", "Tour", "POS"],
+    accent: "#5564E8",
+    component: OnboardingPrototype,
+  },
   {
     slug: "pos",
     title: "Gymly POS",

@@ -5,6 +5,12 @@ A small gallery of self-contained prototypes shipped from Claude Design
 
 ## Available prototypes
 
+- **Guided onboarding** (`#/onboarding`) — reusable, design-system-native
+  onboarding patterns (intro-modal, spotlight coachmark tour, success-toast,
+  launcher/help-hub, setup checklist) with the new POS-flow as the reference
+  integration. The tour engine anchors to real DOM nodes (`data-tour-id`),
+  auto-flips placement and repositions on resize/scroll. A "Componenten" gallery
+  documents each building block. See `src/prototypes/onboarding/README.md`.
 - **Gymly POS** (`#/pos`) — touch point-of-sale for hospitality: floor plan with
   table statuses, an order screen with category-tinted products and a kitchen/bar
   ticket, a kitchen display board, and an open-orders overview — plus reserve,
@@ -40,6 +46,7 @@ src/
     home.css            # gallery styles (injected when Home mounts)
   prototypes/
     registry.ts         # list of prototypes (slug, title, component)
+    onboarding/         # Guided onboarding patterns + POS example + its styles.css
     pos/                # Gymly POS prototype + its styles.css
     billing/            # Gymly Billing prototype + its styles.css
     deal-checkout/      # Deal Checkout prototype + its styles.css
