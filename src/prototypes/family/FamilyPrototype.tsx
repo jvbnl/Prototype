@@ -30,8 +30,6 @@ export function FamilyPrototype() {
   const [toastText, setToastText] = useState("");
   const [first, setFirst] = useState("");
   const [last, setLast] = useState("");
-  const [relation, setRelation] = useState("Dochter");
-  const [mode, setMode] = useState<"search" | "new">("search");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<PoolPerson | null>(null);
   const [familyOpen, setFamilyOpen] = useState(false);
@@ -60,13 +58,13 @@ export function FamilyPrototype() {
     grad: p.grad,
     initials: initials(p.name),
     onSelect: () => {
+      const [fn, ...rest] = p.name.split(" ");
       setSelected(p);
+      setFirst(fn);
+      setLast(rest.join(" "));
       setQuery("");
     },
   }));
-
-  const modeSearch = mode === "search";
-  const modeNew = mode === "new";
 
   // ---- actions ---------------------------------------------------------
   const openModal = () => {
@@ -75,26 +73,20 @@ export function FamilyPrototype() {
     setFamilyOpen(false);
     setFirst("");
     setLast("");
-    setRelation("Dochter");
-    setMode("search");
     setQuery("");
     setSelected(null);
   };
 
   const addMember = () => {
-    let m: Member;
-    if (mode === "search") {
-      if (!selected) return;
-      m = { name: selected.name, relation, grad: selected.grad };
-    } else {
-      const fn = first.trim() || "Nieuw";
-      const ln = last.trim();
-      m = { name: `${fn} ${ln}`.trim(), relation, grad: GRADS[members.length % GRADS.length] };
-    }
+    const fn = first.trim() || "Nieuw";
+    const ln = last.trim();
+    const name = `${fn} ${ln}`.trim();
+    const grad = selected ? selected.grad : GRADS[members.length % GRADS.length];
+    const m: Member = { name, relation: "Familielid", grad };
     setMembers((prev) => [...prev, m]);
     setModalOpen(false);
     setToast(true);
-    setToastText(`${m.name} toegevoegd aan familie`);
+    setToastText(`${name} toegevoegd aan familie`);
     setSelected(null);
     setQuery("");
     setFirst("");
@@ -334,30 +326,24 @@ export function FamilyPrototype() {
         {/* modal */}
         {modalOpen && (
           <AddMemberModal
-            modeSearch={modeSearch}
-            modeNew={modeNew}
-            onModeSearch={() => setMode("search")}
-            onModeNew={() => {
-              setMode("new");
-              setSelected(null);
-              setQuery("");
-            }}
             query={query}
             onQuery={setQuery}
             results={results}
-            showResults={modeSearch && !selected && q !== "" && results.length > 0}
-            noResults={modeSearch && !selected && q !== "" && results.length === 0}
+            showResults={q !== "" && results.length > 0}
+            noResults={q !== "" && results.length === 0}
             hasSelection={!!selected}
             selName={selected ? selected.name : ""}
             selEmail={selected ? selected.email : ""}
-            selGrad={selected ? selected.grad : GRADS[0]}
-            selInitials={selected ? initials(selected.name) : ""}
-            onClearSelection={() => setSelected(null)}
+            onClearSelection={() => {
+              setSelected(null);
+              setFirst("");
+              setLast("");
+              setQuery("");
+            }}
             first={first}
             onFirst={setFirst}
             last={last}
             onLast={setLast}
-            onRelation={setRelation}
             onClose={() => setModalOpen(false)}
             onAdd={addMember}
           />
