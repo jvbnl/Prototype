@@ -61,6 +61,7 @@ interface Product {
   name: string;
   price: number;
   cat: string;
+  image?: string;
 }
 
 interface PosState {
@@ -137,29 +138,33 @@ const CATS = [
   { key: "snacks", label: "Snacks", tint: "#EAF3EA" },
   { key: "bowls", label: "Bowls", tint: "#E2F1EF" },
 ];
+// Image variant — each product carries a stock photo URL. The tile renders an
+// onError fallback to the category color tint, so a single failing CDN photo
+// never breaks the grid.
+const IMG = (id: string) => `https://images.unsplash.com/photo-${id}?w=320&h=320&fit=crop&q=80&auto=format`;
 const PRODUCTS: Product[] = [
-  { id: "p1", name: "Espresso", price: 2.8, cat: "koffie" },
-  { id: "p2", name: "Cappuccino", price: 3.4, cat: "koffie" },
-  { id: "p3", name: "Flat white", price: 3.6, cat: "koffie" },
-  { id: "p4", name: "Latte macchiato", price: 3.8, cat: "koffie" },
-  { id: "p5", name: "Koffie regular", price: 3.2, cat: "koffie" },
-  { id: "p6", name: "Cola", price: 3.0, cat: "frisdrank" },
-  { id: "p7", name: "Spa blauw", price: 2.5, cat: "frisdrank" },
-  { id: "p8", name: "Spa rood", price: 2.7, cat: "frisdrank" },
-  { id: "p9", name: "Fristi", price: 2.8, cat: "frisdrank" },
-  { id: "p10", name: "Ice tea", price: 3.0, cat: "frisdrank" },
-  { id: "p11", name: "Protein shake", price: 6.0, cat: "shakes" },
-  { id: "p12", name: "Banana shake", price: 5.5, cat: "shakes" },
-  { id: "p13", name: "Berry blast", price: 6.5, cat: "shakes" },
-  { id: "p14", name: "Broodje gezond", price: 5.5, cat: "broodjes" },
-  { id: "p15", name: "Tosti ham-kaas", price: 4.5, cat: "broodjes" },
-  { id: "p16", name: "Bagel zalm", price: 7.5, cat: "broodjes" },
-  { id: "p17", name: "Bitterballen", price: 6.0, cat: "snacks" },
-  { id: "p18", name: "Nachos", price: 6.5, cat: "snacks" },
-  { id: "p19", name: "Loaded fries", price: 5.5, cat: "snacks" },
-  { id: "p20", name: "Poke bowl", price: 11.5, cat: "bowls" },
-  { id: "p21", name: "Acai bowl", price: 9.5, cat: "bowls" },
-  { id: "p22", name: "Buddha bowl", price: 10.5, cat: "bowls" },
+  { id: "p1", name: "Espresso", price: 2.8, cat: "koffie", image: IMG("1510591509098-f4fdc6d0ff04") },
+  { id: "p2", name: "Cappuccino", price: 3.4, cat: "koffie", image: IMG("1572442388796-11668a67e53d") },
+  { id: "p3", name: "Flat white", price: 3.6, cat: "koffie", image: IMG("1494314671902-399b18174975") },
+  { id: "p4", name: "Latte macchiato", price: 3.8, cat: "koffie", image: IMG("1561882468-9110e03e0f78") },
+  { id: "p5", name: "Koffie regular", price: 3.2, cat: "koffie", image: IMG("1497935586351-b67a49e012bf") },
+  { id: "p6", name: "Cola", price: 3.0, cat: "frisdrank", image: IMG("1554866585-cd94860890b7") },
+  { id: "p7", name: "Spa blauw", price: 2.5, cat: "frisdrank", image: IMG("1559839734-2b71ea197ec2") },
+  { id: "p8", name: "Spa rood", price: 2.7, cat: "frisdrank", image: IMG("1523362628745-0c100150b504") },
+  { id: "p9", name: "Fristi", price: 2.8, cat: "frisdrank", image: IMG("1622483767028-3f66f32aef97") },
+  { id: "p10", name: "Ice tea", price: 3.0, cat: "frisdrank", image: IMG("1556679343-c7306c1976bc") },
+  { id: "p11", name: "Protein shake", price: 6.0, cat: "shakes", image: IMG("1502301103665-0b95cc738daf") },
+  { id: "p12", name: "Banana shake", price: 5.5, cat: "shakes", image: IMG("1623065422902-30a2d299bbe4") },
+  { id: "p13", name: "Berry blast", price: 6.5, cat: "shakes", image: IMG("1553530666-ba11a7da3888") },
+  { id: "p14", name: "Broodje gezond", price: 5.5, cat: "broodjes", image: IMG("1539252554453-80ab65ce3586") },
+  { id: "p15", name: "Tosti ham-kaas", price: 4.5, cat: "broodjes", image: IMG("1528736235302-52922df5c122") },
+  { id: "p16", name: "Bagel zalm", price: 7.5, cat: "broodjes", image: IMG("1592151450775-7f1c5da0f3a1") },
+  { id: "p17", name: "Bitterballen", price: 6.0, cat: "snacks", image: IMG("1599490659213-e2b9527bd087") },
+  { id: "p18", name: "Nachos", price: 6.5, cat: "snacks", image: IMG("1582169296194-e4d644c48063") },
+  { id: "p19", name: "Loaded fries", price: 5.5, cat: "snacks", image: IMG("1541592106381-b31e9677c0e5") },
+  { id: "p20", name: "Poke bowl", price: 11.5, cat: "bowls", image: IMG("1546069901-ba9599a7e63c") },
+  { id: "p21", name: "Acai bowl", price: 9.5, cat: "bowls", image: IMG("1590301157890-4810ed352733") },
+  { id: "p22", name: "Buddha bowl", price: 10.5, cat: "bowls", image: IMG("1490645935967-10de6ba17061") },
 ];
 
 // ── Product variants / modifiers (Tebi model: variant + modifier groups) ──
@@ -557,6 +562,9 @@ export function PosPrototype() {
   const [posMode, setPosMode] = useState<"table" | "counter">("table");
   // Feature flag: reservations are out of scope for v1, off by default.
   const [reservationsOn, setReservationsOn] = useState(false);
+  // Feature flag: product tiles show stock photos instead of colour tints.
+  // Off by default — colour coding ships as v1.
+  const [productImagesOn, setProductImagesOn] = useState(false);
   // Feature flag: kitchen / KDS is out of scope for v1, off by default.
   const [kitchenOn, setKitchenOn] = useState(false);
   const [counterSeq, setCounterSeq] = useState(0);
@@ -1534,7 +1542,23 @@ export function PosPrototype() {
               </div>
               <div className="pos-product-scroll">
                 <div className="pos-product-grid">
-                  {(s.activeCat === "alles" ? PRODUCTS : PRODUCTS.filter((p) => p.cat === s.activeCat)).map((p) => (
+                  {(s.activeCat === "alles" ? PRODUCTS : PRODUCTS.filter((p) => p.cat === s.activeCat)).map((p) => productImagesOn && p.image ? (
+                    <div key={p.id} className="pos-tile" onClick={() => openProduct(p)} style={{ background: "#fff", border: "1px solid #EAECF0", borderRadius: 16, height: 184, display: "flex", flexDirection: "column", cursor: "pointer", userSelect: "none", boxShadow: "0 1px 2px rgba(16,24,40,0.04)", overflow: "hidden" }}>
+                      <div style={{ position: "relative", flex: 1, background: catTint(p.cat) }}>
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        />
+                        {productMods(p).length > 0 && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 11, fontWeight: 600, color: "#6941C6", background: "rgba(255,255,255,0.92)", borderRadius: 6, padding: "2px 6px" }}>opties</span>}
+                      </div>
+                      <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 2 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, lineHeight: 1.2, color: "#101828", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#475467" }}>{fmt(p.price)}</span>
+                      </div>
+                    </div>
+                  ) : (
                     <div key={p.id} className="pos-tile" onClick={() => openProduct(p)} style={{ background: catTint(p.cat), border: "1px solid rgba(16,24,40,0.04)", borderRadius: 16, padding: 14, height: 118, display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "pointer", userSelect: "none", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
                       <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.25, color: "#101828" }}>{p.name}</div>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -2359,6 +2383,8 @@ export function PosPrototype() {
         setStaffName={setStaffName}
         reservationsOn={reservationsOn}
         setReservationsOn={setReservationsOn}
+        productImagesOn={productImagesOn}
+        setProductImagesOn={setProductImagesOn}
         kitchenOn={kitchenOn}
         setKitchenOn={(v) => {
           setKitchenOn(v);
@@ -2808,6 +2834,8 @@ function PosTweaks({
   setStaffName,
   reservationsOn,
   setReservationsOn,
+  productImagesOn,
+  setProductImagesOn,
   kitchenOn,
   setKitchenOn,
   posMode,
@@ -2824,6 +2852,8 @@ function PosTweaks({
   setKitchenOn: (v: boolean) => void;
   reservationsOn: boolean;
   setReservationsOn: (v: boolean) => void;
+  productImagesOn: boolean;
+  setProductImagesOn: (v: boolean) => void;
   posMode: "table" | "counter";
   setPosMode: (m: "table" | "counter") => void;
   onReset: () => void;
@@ -2860,6 +2890,13 @@ function PosTweaks({
         <div className="pos-twk-seg">
           {([[false, "Uit"], [true, "Aan"]] as const).map(([v, label]) => (
             <button key={"kit" + String(v)} className={kitchenOn === v ? "on" : ""} onClick={() => setKitchenOn(v)}>{label}</button>
+          ))}
+        </div>
+
+        <div className="pos-twk-sect">Productweergave</div>
+        <div className="pos-twk-seg">
+          {([[false, "Kleur"], [true, "Afbeelding"]] as const).map(([v, label]) => (
+            <button key={"img" + String(v)} className={productImagesOn === v ? "on" : ""} onClick={() => setProductImagesOn(v)}>{label}</button>
           ))}
         </div>
 
