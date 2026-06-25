@@ -17,6 +17,11 @@ A small gallery of self-contained prototypes shipped from Claude Design
 - **Gymly Billing** (`#/billing`) — self-serve billing settings: current plan,
   bill preview, add-ons, support tier, payment method, invoices, and a full
   feature-matrix Plans tab with monthly/yearly billing.
+- **Family accounts** (`#/family`) — member detail screen with the "Add family
+  member" flow: link an existing member or create a new one, with relation and
+  billing (IBAN, billing email) inherited from the hoofdaccount. Adding a member
+  reveals the family-group switcher, logs an activity entry and fires a toast;
+  the tweaks panel seeds the family size and opens the menu/modal overlays.
 
 The landing page at `/` lists every prototype. Selecting one updates the URL
 hash; back-navigation returns to the gallery.
@@ -38,6 +43,7 @@ src/
     pos/                # Gymly POS prototype + its styles.css
     billing/            # Gymly Billing prototype + its styles.css
     deal-checkout/      # Deal Checkout prototype + its styles.css
+    family/             # Family accounts prototype + its styles.css
 ```
 
 Each prototype owns its CSS as a `?raw`-imported string (configured in
