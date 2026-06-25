@@ -20,12 +20,18 @@ type Station = "bar" | "keuken";
 type TicketStatus = "new" | "progress" | "done";
 type PendingAction = "send" | "park" | null;
 
+interface SelectedMod {
+  groupLabel: string;
+  optionLabel: string;
+  price: number;
+}
 interface OrderLine {
   oid: string;
   name: string;
-  price: number;
+  price: number; // unit price incl. modifier surcharges
   qty: number;
   sent: boolean;
+  mods?: SelectedMod[];
 }
 interface TableT {
   id: string;
@@ -45,7 +51,7 @@ interface TableT {
 interface Ticket {
   id: string;
   table: string;
-  items: { qty: number; name: string }[];
+  items: { qty: number; name: string; mods?: string }[];
   status: TicketStatus;
   station: Station;
   createdAt: number;
@@ -80,6 +86,8 @@ interface PosState {
   editingOid: string | null;
   cancelOid: string | null;
   cancelMode: "remove" | "decrement";
+  modProductId: string | null;
+  modSel: Record<string, string[]>;
   showNamePrompt: boolean;
   nameInput: string;
   pendingAction: PendingAction;
@@ -148,6 +156,76 @@ const PRODUCTS: Product[] = [
   { id: "p21", name: "Acai bowl", price: 9.5, cat: "bowls" },
   { id: "p22", name: "Buddha bowl", price: 10.5, cat: "bowls" },
 ];
+
+// ── Product variants / modifiers (Tebi model: variant + modifier groups) ──
+// Single groups = radio (one choice, a default is pre-selected, price 0);
+// multi groups = checkboxes (extras). Non-default / extra options carry a
+// surcharge that is added to the line's unit price.
+interface ModOption { id: string; label: string; price: number }
+interface ModGroup { id: string; label: string; type: "single" | "multi"; required?: boolean; defaultId?: string; options: ModOption[] }
+
+const MODS_BY_CAT: Record<string, ModGroup[]> = {
+  koffie: [
+    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "m", options: [
+      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 0.6 },
+    ] },
+    { id: "melk", label: "Melk", type: "single", defaultId: "vol", options: [
+      { id: "vol", label: "Volle melk", price: 0 }, { id: "half", label: "Halfvolle melk", price: 0 },
+      { id: "haver", label: "Haver", price: 0.5 }, { id: "soja", label: "Soja", price: 0.5 }, { id: "lf", label: "Lactosevrij", price: 0.5 },
+    ] },
+    { id: "extra", label: "Extra's", type: "multi", options: [
+      { id: "shot", label: "Extra shot", price: 0.5 }, { id: "vanille", label: "Vanille siroop", price: 0.5 },
+      { id: "caramel", label: "Caramel siroop", price: 0.5 }, { id: "hazel", label: "Hazelnoot siroop", price: 0.5 },
+      { id: "slag", label: "Slagroom", price: 0.5 }, { id: "decaf", label: "Decaf", price: 0 },
+    ] },
+  ],
+  frisdrank: [
+    { id: "formaat", label: "Formaat", type: "single", defaultId: "blik", options: [
+      { id: "blik", label: "Blikje", price: 0 }, { id: "fles", label: "Flesje", price: 0.5 },
+    ] },
+    { id: "ijs", label: "IJs", type: "single", defaultId: "met", options: [
+      { id: "met", label: "Met ijs", price: 0 }, { id: "zonder", label: "Zonder ijs", price: 0 },
+    ] },
+  ],
+  shakes: [
+    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "m", options: [
+      { id: "m", label: "Medium", price: 0 }, { id: "l", label: "Groot", price: 1.0 },
+    ] },
+    { id: "basis", label: "Melkbasis", type: "single", defaultId: "vol", options: [
+      { id: "vol", label: "Volle melk", price: 0 }, { id: "haver", label: "Haver", price: 0.5 }, { id: "amandel", label: "Amandel", price: 0.5 },
+    ] },
+    { id: "boost", label: "Boosts", type: "multi", options: [
+      { id: "prot", label: "Proteïne schep", price: 1.5 }, { id: "pb", label: "Pindakaas", price: 0.75 },
+    ] },
+  ],
+  broodjes: [
+    { id: "brood", label: "Brood", type: "single", required: true, defaultId: "bruin", options: [
+      { id: "bruin", label: "Bruin", price: 0 }, { id: "wit", label: "Wit", price: 0 }, { id: "zuur", label: "Zuurdesem", price: 0 }, { id: "bagel", label: "Bagel", price: 0 },
+    ] },
+    { id: "toast", label: "Getoast", type: "single", defaultId: "niet", options: [
+      { id: "niet", label: "Niet getoast", price: 0 }, { id: "wel", label: "Getoast", price: 0 },
+    ] },
+    { id: "extra", label: "Extra's", type: "multi", options: [
+      { id: "kaas", label: "Kaas", price: 1.0 }, { id: "avo", label: "Avocado", price: 1.5 }, { id: "ei", label: "Ei", price: 1.0 }, { id: "bacon", label: "Bacon", price: 1.5 },
+    ] },
+  ],
+  bowls: [
+    { id: "basis", label: "Basis", type: "single", required: true, defaultId: "rijst", options: [
+      { id: "rijst", label: "Rijst", price: 0 }, { id: "quinoa", label: "Quinoa", price: 0 }, { id: "groen", label: "Groene mix", price: 0 },
+    ] },
+    { id: "maat", label: "Maat", type: "single", required: true, defaultId: "reg", options: [
+      { id: "reg", label: "Regulier", price: 0 }, { id: "groot", label: "Groot", price: 2.0 },
+    ] },
+    { id: "eiwit", label: "Eiwit", type: "multi", options: [
+      { id: "kip", label: "Kip", price: 2.5 }, { id: "zalm", label: "Zalm", price: 3.5 }, { id: "tofu", label: "Tofu", price: 2.0 },
+    ] },
+    { id: "top", label: "Toppings", type: "multi", options: [
+      { id: "avo", label: "Avocado", price: 1.5 }, { id: "dressing", label: "Extra dressing", price: 0.5 },
+    ] },
+  ],
+};
+const productMods = (p: Product): ModGroup[] => MODS_BY_CAT[p.cat] || [];
+const modSummary = (o: { mods?: SelectedMod[] }): string => (o.mods || []).map((m) => m.optionLabel).join(" · ");
 
 const AREA_ORDER: Area[] = ["bar", "terras"];
 const AREA_LABELS: Record<Area, string> = { bar: "Bar", terras: "Terras" };
@@ -241,6 +319,8 @@ function makeInitialState(): PosState {
     editingOid: null,
     cancelOid: null,
     cancelMode: "remove",
+    modProductId: null,
+    modSel: {},
     showNamePrompt: false,
     nameInput: "",
     pendingAction: null,
@@ -655,15 +735,51 @@ export function PosPrototype() {
   };
 
   // ── Order edits ──
-  const addProduct = (p: Product) => {
+  // Add a line with the chosen modifiers. Lines merge only when the product
+  // AND the modifier selection match, so a soy latte stays separate from a
+  // regular latte.
+  const addLine = (p: Product, mods: SelectedMod[]) => {
     const id = s.activeTableId!;
+    const unit = round2(p.price + mods.reduce((sum, m) => sum + m.price, 0));
+    const key = mods.map((m) => m.optionLabel).sort().join("|");
     updateTable(id, (t) => {
       const orders = (t.orders || []).slice();
-      const idx = orders.findIndex((o) => o.name === p.name && !o.sent);
+      const idx = orders.findIndex((o) => o.name === p.name && !o.sent && (o.mods || []).map((m) => m.optionLabel).sort().join("|") === key);
       if (idx >= 0) orders[idx] = { ...orders[idx], qty: orders[idx].qty + 1 };
-      else orders.push({ oid: "n" + Date.now() + Math.random().toString(36).slice(2, 6), name: p.name, price: p.price, qty: 1, sent: false });
+      else orders.push({ oid: "n" + Date.now() + Math.random().toString(36).slice(2, 6), name: p.name, price: unit, qty: 1, sent: false, mods: mods.length ? mods : undefined });
       return { ...t, orders };
     });
+  };
+  // Tap a product: open the modifier sheet, or add straight to the bill when
+  // the product has no variants.
+  const openProduct = (p: Product) => {
+    const groups = productMods(p);
+    if (!groups.length) { addLine(p, []); return; }
+    const sel: Record<string, string[]> = {};
+    groups.forEach((g) => { sel[g.id] = g.type === "single" ? [g.defaultId || g.options[0].id] : []; });
+    patch({ modProductId: p.id, modSel: sel });
+  };
+  const toggleMod = (g: ModGroup, optId: string) =>
+    patch((st) => {
+      const cur = st.modSel[g.id] || [];
+      const next = g.type === "single" ? [optId] : cur.includes(optId) ? cur.filter((x) => x !== optId) : cur.concat([optId]);
+      return { modSel: { ...st.modSel, [g.id]: next } };
+    });
+  const closeMod = () => patch({ modProductId: null });
+  const confirmMod = () => {
+    const p = PRODUCTS.find((x) => x.id === s.modProductId);
+    if (!p) return;
+    const mods: SelectedMod[] = [];
+    productMods(p).forEach((g) => {
+      (s.modSel[g.id] || []).forEach((optId) => {
+        const opt = g.options.find((o) => o.id === optId);
+        if (!opt) return;
+        // Keep deliberate choices: every extra (multi) and any non-default single.
+        if (g.type === "multi" || optId !== g.defaultId) mods.push({ groupLabel: g.label, optionLabel: opt.label, price: opt.price });
+      });
+    });
+    addLine(p, mods);
+    patch({ modProductId: null });
   };
   const incItem = (oid: string) =>
     updateTable(s.activeTableId!, (t) => ({ ...t, orders: (t.orders || []).map((o) => (o.oid === oid ? { ...o, qty: o.qty + 1 } : o)) }));
@@ -774,10 +890,10 @@ export function PosPrototype() {
     const unsent = (t.orders || []).filter((o) => !o.sent);
     if (!unsent.length) return;
     const lbl = forcedName && t.walkin ? forcedName : tlabel(t);
-    const groups: Record<string, { qty: number; name: string }[]> = {};
+    const groups: Record<string, { qty: number; name: string; mods?: string }[]> = {};
     unsent.forEach((o) => {
       const st = stationForName(o.name);
-      (groups[st] = groups[st] || []).push({ qty: o.qty, name: o.name });
+      (groups[st] = groups[st] || []).push({ qty: o.qty, name: o.name, mods: modSummary(o) || undefined });
     });
     updateTable(t.id, (tt) => {
       tt.orders = (tt.orders || []).map((o) => ({ ...o, sent: true }));
@@ -931,7 +1047,7 @@ export function PosPrototype() {
       payment: breakdown.payment,
       isWalkin: isWalk,
       area: t.area,
-      lines: (t.orders || []).map((o) => ({ name: o.name, qty: o.qty, price: o.price })),
+      lines: (t.orders || []).map((o) => ({ name: o.name + (modSummary(o) ? " · " + modSummary(o) : ""), qty: o.qty, price: o.price })),
     };
     patch((st) => ({ closedOrders: [closed, ...st.closedOrders] }));
     if (isWalk) patch((st) => ({ tables: st.tables.filter((x) => x.id !== id) }));
@@ -1020,10 +1136,11 @@ export function PosPrototype() {
       const wc = m >= 30 ? { color: "#B42318", background: "#FEE4E2" } : m >= 15 ? { color: "#B54708", background: "#FEF0C7" } : { color: "#475467", background: "#F2F4F7" };
       const ic = (t.orders || []).reduce((a, o) => a + o.qty, 0);
       const lbl = tlabel(t);
-      const lines: { name: string; qty: number; price: number }[] = (t.orders || []).map((o) => ({
+      const lines: { name: string; qty: number; price: number; mods: string }[] = (t.orders || []).map((o) => ({
         name: o.name,
         qty: o.qty,
         price: o.price,
+        mods: modSummary(o),
       }));
       const exp = !!s.expandOverrides[t.id];
       return { t, m, wc, ic, lbl, lines, exp };
@@ -1065,13 +1182,19 @@ export function PosPrototype() {
           style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 8px", margin: "0 -8px", borderRadius: 10, borderBottom: "1px solid #F7F8FA", cursor: "pointer", minHeight: 56 }}
         >
           <div style={{ width: 32, height: 32, borderRadius: 8, background: "#F2F4F7", color: "#98A2B3", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{o.qty}</div>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: "#98A2B3" }}>{o.name}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, color: "#98A2B3" }}>{o.name}</div>
+            {modSummary(o) && <div style={{ fontSize: 12.5, color: "#B0B7C3", marginTop: 1 }}>{modSummary(o)}</div>}
+          </div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#98A2B3" }}>{fmt(o.price * o.qty)}</div>
         </div>
       );
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid #F7F8FA", minHeight: 60 }}>
-        <div style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{o.name}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{o.name}</div>
+          {modSummary(o) && <div style={{ fontSize: 12.5, color: "#98A2B3", marginTop: 1 }}>{modSummary(o)}</div>}
+        </div>
         <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 12, overflow: "hidden" }}>
           <div onClick={onDec} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
           <div style={{ minWidth: 32, textAlign: "center", fontSize: 16, fontWeight: 700 }}>{o.qty}</div>
@@ -1349,9 +1472,12 @@ export function PosPrototype() {
               <div className="pos-product-scroll">
                 <div className="pos-product-grid">
                   {(s.activeCat === "alles" ? PRODUCTS : PRODUCTS.filter((p) => p.cat === s.activeCat)).map((p) => (
-                    <div key={p.id} className="pos-tile" onClick={() => addProduct(p)} style={{ background: catTint(p.cat), border: "1px solid rgba(16,24,40,0.04)", borderRadius: 16, padding: 14, height: 118, display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "pointer", userSelect: "none", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+                    <div key={p.id} className="pos-tile" onClick={() => openProduct(p)} style={{ background: catTint(p.cat), border: "1px solid rgba(16,24,40,0.04)", borderRadius: 16, padding: 14, height: 118, display: "flex", flexDirection: "column", justifyContent: "space-between", cursor: "pointer", userSelect: "none", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
                       <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.25, color: "#101828" }}>{p.name}</div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "#475467" }}>{fmt(p.price)}</div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontSize: 14, fontWeight: 600, color: "#475467" }}>{fmt(p.price)}</span>
+                        {productMods(p).length > 0 && <span style={{ fontSize: 11, fontWeight: 600, color: "#6941C6", background: "rgba(255,255,255,0.7)", borderRadius: 6, padding: "2px 6px" }}>opties</span>}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1383,7 +1509,8 @@ export function PosPrototype() {
                       <div key={o.oid} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", minHeight: 56 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{o.name}</div>
-                          <div style={{ fontSize: 12, color: "#98A2B3" }}>{fmt(o.price)}</div>
+                          {modSummary(o) && <div style={{ fontSize: 12.5, color: "#6941C6", marginTop: 1 }}>{modSummary(o)}</div>}
+                          <div style={{ fontSize: 12, color: "#98A2B3", marginTop: 1 }}>{fmt(o.price)}</div>
                         </div>
                         <div style={{ display: "flex", alignItems: "center", border: "1px solid #E4E7EC", borderRadius: 12, overflow: "hidden" }}>
                           <div onClick={() => decItem(o.oid)} className="pos-step" style={{ width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, color: "#475467", cursor: "pointer", userSelect: "none" }}>{"−"}</div>
@@ -1465,7 +1592,10 @@ export function PosPrototype() {
                           {k.items.map((it, i) => (
                             <div key={i} style={{ display: "flex", gap: 8, fontSize: 14, color: "#344054" }}>
                               <span style={{ fontWeight: 700, color: "#101828", minWidth: 24 }}>{it.qty + "×"}</span>
-                              <span>{it.name}</span>
+                              <span>
+                                {it.name}
+                                {it.mods && <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#B54708" }}>{it.mods}</span>}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1556,7 +1686,10 @@ export function PosPrototype() {
                           {lines.map((ln, i) => (
                             <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 2px", borderBottom: "1px solid #F2F4F7" }}>
                               <span style={{ fontSize: 15, fontWeight: 700, color: "#101828", minWidth: 30 }}>{ln.qty}×</span>
-                              <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
+                              <span style={{ flex: 1, minWidth: 0 }}>
+                                <span style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{ln.name}</span>
+                                {ln.mods && <span style={{ display: "block", fontSize: 12.5, color: "#98A2B3" }}>{ln.mods}</span>}
+                              </span>
                               <span style={{ fontSize: 14, fontWeight: 600, color: "#475467", width: 72, textAlign: "right" }}>{fmt(ln.price * ln.qty)}</span>
                             </div>
                           ))}
@@ -2090,6 +2223,59 @@ export function PosPrototype() {
               <div style={{ display: "flex", gap: 12 }}>
                 <div onClick={() => applyTableDiscount(0)} style={{ flex: 1, height: 50, borderRadius: 12, border: "1.5px solid #E4E7EC", background: "#fff", color: current > 0 ? "#D92D20" : "#98A2B3", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: current > 0 ? "pointer" : "default" }}>{current > 0 ? "Verwijderen" : "Geen korting"}</div>
                 <div onClick={() => patch({ showDiscountModal: false })} style={{ flex: 1, height: 50, borderRadius: 12, background: "#fff", border: "1.5px solid #E4E7EC", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Sluiten</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ───── Product variants / modifiers sheet ───── */}
+      {s.modProductId != null && (() => {
+        const p = PRODUCTS.find((x) => x.id === s.modProductId);
+        if (!p) return null;
+        const groups = productMods(p);
+        let unit = p.price;
+        groups.forEach((g) => (s.modSel[g.id] || []).forEach((id) => { const o = g.options.find((x) => x.id === id); if (o) unit += o.price; }));
+        unit = round2(unit);
+        const canConfirm = groups.filter((g) => g.required).every((g) => (s.modSel[g.id] || []).length > 0);
+        return (
+          <div style={overlay(0.45, 60)} onClick={closeMod}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100dvh - 32px)", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 24, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease", overflow: "hidden" }}>
+              <div style={{ flexShrink: 0, padding: "22px 24px 14px", borderBottom: "1px solid #F2F4F7" }}>
+                <div style={{ fontSize: 20, fontWeight: 800 }}>{p.name}</div>
+                <div style={{ fontSize: 14, color: "#667085", marginTop: 2 }}>Vanaf {fmt(p.price)} · kies je opties</div>
+              </div>
+              <div style={{ flex: 1, overflow: "auto", padding: "8px 24px 16px" }}>
+                {groups.map((g) => (
+                  <div key={g.id} style={{ padding: "14px 0 6px" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>{g.label}</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: g.required ? "#B54708" : "#98A2B3" }}>{g.required ? "verplicht" : g.type === "multi" ? "meerdere mogelijk" : "optioneel"}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {g.options.map((o) => {
+                        const on = (s.modSel[g.id] || []).includes(o.id);
+                        return (
+                          <div key={o.id} onClick={() => toggleMod(g, o.id)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 14px", borderRadius: 12, border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", cursor: "pointer", minHeight: 52 }}>
+                            <span style={{ width: 22, height: 22, borderRadius: g.type === "single" ? "50%" : 7, border: "2px solid " + (on ? PURPLE : "#D0D5DD"), background: on && g.type === "multi" ? PURPLE : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                              {on && g.type === "single" && <span style={{ width: 11, height: 11, borderRadius: "50%", background: PURPLE }} />}
+                              {on && g.type === "multi" && <CheckIcon size={13} />}
+                            </span>
+                            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 500, color: "#101828" }}>{o.label}</span>
+                            {o.price > 0 && <span style={{ fontSize: 14, fontWeight: 600, color: on ? "#6941C6" : "#667085" }}>+{fmt(o.price)}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ flexShrink: 0, padding: "14px 24px 20px", borderTop: "1px solid #EAECF0", display: "flex", gap: 12 }}>
+                <div onClick={closeMod} style={{ width: 110, height: 54, borderRadius: 14, border: "1.5px solid #E4E7EC", background: "#fff", color: "#344054", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>Annuleren</div>
+                <div onClick={() => canConfirm && confirmMod()} style={{ flex: 1, height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 16, fontWeight: 700, ...(canConfirm ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>
+                  <span>Toevoegen</span>
+                  <span>{fmt(unit)}</span>
+                </div>
               </div>
             </div>
           </div>
