@@ -2472,29 +2472,27 @@ export function PosPrototype() {
         }
         return (
           <div style={overlay(0.55, 70)} onClick={close}>
-            <div onClick={stop} style={{ width: "100%", maxWidth: 880, maxHeight: "calc(100dvh - 40px)", display: "flex", flexDirection: "column", background: "#fff", borderRadius: 16, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .2s ease", overflow: "hidden" }}>
-              <div style={{ display: "flex", alignItems: "stretch", flex: 1, minHeight: 480, position: "relative" }}>
-                <div style={{ flex: 1, padding: "44px 44px 32px", display: "flex", flexDirection: "column", justifyContent: "center", position: "relative" }}>
-                  <button onClick={close} aria-label="Sluiten" style={{ position: "absolute", top: 18, left: 18, width: 32, height: 32, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#101828", padding: 0 }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
-                  </button>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 880, maxHeight: "calc(100dvh - 40px)", display: "flex", alignItems: "stretch", minHeight: 520, background: "#fff", borderRadius: 16, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .2s ease", overflow: "hidden", position: "relative" }}>
+              <div style={{ flex: 1, padding: "60px 44px 28px", display: "flex", flexDirection: "column", position: "relative", minWidth: 0 }}>
+                <button onClick={close} aria-label="Sluiten" style={{ position: "absolute", top: 18, left: 18, width: 32, height: 32, borderRadius: "50%", background: "transparent", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#101828", padding: 0 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12M18 6 6 18" /></svg>
+                </button>
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
                   {left}
                 </div>
-                <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#F2F4F7" }}>{right}</div>
-              </div>
-              <div style={{ flexShrink: 0, padding: "16px 28px 20px", borderTop: "1px solid #EAECF0", display: "flex", alignItems: "center", gap: 20 }}>
-                <Bars />
-                <div style={{ display: "flex", alignItems: "center", gap: 16, flexShrink: 0 }}>
+                <div style={{ flexShrink: 0, paddingTop: 24, marginTop: 24, borderTop: "1px solid #EAECF0", display: "flex", alignItems: "center", gap: 16 }}>
+                  <Bars />
                   {tourStep > 0 ? (
-                    <div onClick={prev} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Vorige</div>
+                    <div onClick={prev} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, flexShrink: 0 }}>Vorige</div>
                   ) : (
-                    <div onClick={close} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}>Overslaan</div>
+                    <div onClick={close} style={{ fontSize: 14, fontWeight: 700, color: "#101828", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3, flexShrink: 0 }}>Overslaan</div>
                   )}
-                  <div onClick={isLast ? close : next} style={{ height: 44, padding: "0 22px", borderRadius: 10, background: "#101828", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+                  <div onClick={isLast ? close : next} style={{ height: 44, padding: "0 22px", borderRadius: 10, background: "#101828", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
                     {isLast ? "Aan de slag" : "Volgende"}
                   </div>
                 </div>
               </div>
+              <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "#F2F4F7" }}>{right}</div>
             </div>
           </div>
         );
