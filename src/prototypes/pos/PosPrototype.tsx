@@ -565,6 +565,9 @@ export function PosPrototype() {
   // Feature flag: product tiles show stock photos instead of colour tints.
   // Off by default — colour coding ships as v1.
   const [productImagesOn, setProductImagesOn] = useState(false);
+  // Guided onboarding tour. `null` = closed; 0..n = current step. Triggered
+  // from Tweaks ("Tour opnieuw bekijken"); not auto-shown on first run.
+  const [tourStep, setTourStep] = useState<number | null>(null);
   // Feature flag: kitchen / KDS is out of scope for v1, off by default.
   const [kitchenOn, setKitchenOn] = useState(false);
   const [counterSeq, setCounterSeq] = useState(0);
@@ -2369,6 +2372,165 @@ export function PosPrototype() {
         );
       })()}
 
+      {/* ───── Guided onboarding tour ───── */}
+      {tourStep != null && (() => {
+        const total = 4;
+        const next = () => setTourStep((s) => (s == null ? null : s + 1 < total ? s + 1 : null));
+        const prev = () => setTourStep((s) => (s == null ? null : Math.max(0, s - 1)));
+        const close = () => setTourStep(null);
+        const Dots = () => (
+          <div style={{ display: "flex", gap: 6 }}>
+            {Array.from({ length: total }).map((_, i) => (
+              <span key={i} style={{ width: i === tourStep ? 22 : 7, height: 7, borderRadius: 999, background: i <= tourStep ? PURPLE : "#E4E7EC", transition: "width 0.2s ease, background 0.2s ease" }} />
+            ))}
+          </div>
+        );
+        const Visual = ({ children, bg }: { children: ReactNode; bg: string }) => (
+          <div style={{ height: 168, borderRadius: 18, background: bg, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 22, position: "relative", overflow: "hidden" }}>{children}</div>
+        );
+        const Bullet = ({ icon, label, sub }: { icon: ReactNode; label: string; sub: string }) => (
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 0" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: "#F4EBFF", color: PURPLE, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: "#101828" }}>{label}</div>
+              <div style={{ fontSize: 13.5, color: "#667085", marginTop: 2 }}>{sub}</div>
+            </div>
+          </div>
+        );
+        let title = "", sub = "", visual: ReactNode = null, body: ReactNode = null;
+        if (tourStep === 0) {
+          title = "Welkom bij je nieuwe POS";
+          sub = "Een snelle rondleiding door de belangrijkste flows. Twee minuten — overslaan kan altijd.";
+          visual = (
+            <Visual bg="linear-gradient(135deg, #F4EBFF 0%, #E0EAFF 100%)">
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 64, height: 64, borderRadius: 18, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 24px rgba(112,0,255,0.3)" }}>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9" /><path d="M9 12l2 2 4-4" /></svg>
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#6941C6" }}>Point of Sale · v1</div>
+              </div>
+            </Visual>
+          );
+          body = (
+            <div>
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6" /></svg>} label="Snel aanslaan" sub="Tap producten, kies opties, Submit terug naar de vloer." />
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18" /></svg>} label="Kassa-discipline" sub="Begin en eindig je dienst met een geteld startgeld en kasverschil." />
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M4 12h16M4 18h10" /></svg>} label="Volledig overzicht" sub="Open orders, kassa-status en dagrapport altijd binnen handbereik." />
+            </div>
+          );
+        } else if (tourStep === 1) {
+          title = "Begin en eindig je dienst";
+          sub = "Drie korte stappen: kassa kiezen, jezelf koppelen, startgeld tellen.";
+          visual = (
+            <Visual bg="#F9FAFB">
+              <div style={{ display: "flex", gap: 10 }}>
+                {[
+                  { n: "1", l: "Kassa" },
+                  { n: "2", l: "Cashier" },
+                  { n: "3", l: "Tellen" },
+                ].map((s, i) => (
+                  <div key={s.n} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ width: 84, padding: "12px 10px", background: "#fff", border: "1.5px solid " + (i === 2 ? PURPLE : "#E4E7EC"), borderRadius: 14, textAlign: "center", boxShadow: "0 1px 2px rgba(16,24,40,0.04)" }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: i === 2 ? PURPLE : "#F4EBFF", color: i === 2 ? "#fff" : "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, margin: "0 auto 6px" }}>{s.n}</div>
+                      <div style={{ fontSize: 12.5, fontWeight: 700, color: "#101828" }}>{s.l}</div>
+                    </div>
+                    {i < 2 && <span style={{ color: "#D0D5DD", fontSize: 18 }}>→</span>}
+                  </div>
+                ))}
+              </div>
+            </Visual>
+          );
+          body = (
+            <div>
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2" /></svg>} label="Kassa overzicht" sub="Zie status per kassa en sluit een dienst remote als iemand vergeet af te melden." />
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>} label="Koppel medewerker" sub="Zoek of selecteer een cashier — alle transacties worden toegerekend." />
+              <Bullet icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18v10H3z" /><path d="M7 7v10M17 7v10" /></svg>} label="Lade tellen" sub="Tap-to-add per denominatie, met live totaal en kasverschil bij sluiten." />
+            </div>
+          );
+        } else if (tourStep === 2) {
+          title = "Hoe wil je producten zien?";
+          sub = "Kies wat het beste werkt voor jullie team. Je kunt later altijd switchen.";
+          body = (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 4 }}>
+              {([
+                { v: false, t: "Kleurcodering", d: "Snel scannen op categorie — werkt goed voor ervaren teams." },
+                { v: true, t: "Afbeeldingen", d: "Visueel rijker — handig voor nieuw personeel of grote menukaarten." },
+              ] as const).map((opt) => {
+                const on = productImagesOn === opt.v;
+                return (
+                  <div key={String(opt.v)} onClick={() => setProductImagesOn(opt.v)} className="pos-hover-row" style={{ cursor: "pointer", border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", borderRadius: 16, padding: 14 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
+                      {opt.v ? (
+                        ["1495474472287-4d71bcdd2085", "1554866585-cd94860890b7", "1539252554453-80ab65ce3586", "1546069901-ba9599a7e63c"].map((id) => (
+                          <div key={id} style={{ height: 44, borderRadius: 8, backgroundImage: `url(https://images.unsplash.com/photo-${id}?w=160&h=160&fit=crop&q=70&auto=format)`, backgroundSize: "cover", backgroundPosition: "center", background: "#F2ECE3" }} />
+                        ))
+                      ) : (
+                        [
+                          { tint: "#F2ECE3" }, { tint: "#E9F0FA" }, { tint: "#FAF1E1" }, { tint: "#E2F1EF" },
+                        ].map((t, i) => (
+                          <div key={i} style={{ height: 44, borderRadius: 8, background: t.tint, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#6941C6" }}>Aa</div>
+                        ))
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid " + (on ? PURPLE : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {on && <span style={{ width: 9, height: 9, borderRadius: "50%", background: PURPLE }} />}
+                      </span>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: "#101828" }}>{opt.t}</div>
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "#667085", marginTop: 4 }}>{opt.d}</div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        } else if (tourStep === 3) {
+          title = "Je bent klaar om te beginnen";
+          sub = "Alle instellingen, modi en feature flags zijn altijd terug te vinden via de Tweaks-pil rechtsonder.";
+          visual = (
+            <Visual bg="linear-gradient(135deg, #ECFDF3 0%, #F4EBFF 100%)">
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#12B76A", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 12px 28px rgba(18,183,106,0.3)" }}>
+                  <CheckIcon size={36} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#067647" }}>Tour voltooid</div>
+              </div>
+            </Visual>
+          );
+          body = (
+            <div style={{ background: "#F9FAFB", borderRadius: 12, padding: "12px 14px", fontSize: 13.5, color: "#475467", display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: "#F4EBFF", color: "#6941C6", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 800 }}>⚙</span>
+              <span>Onboarding kun je later opnieuw bekijken vanuit het Tweaks-paneel.</span>
+            </div>
+          );
+        }
+        const isLast = tourStep === total - 1;
+        return (
+          <div style={overlay(0.55, 70)} onClick={close}>
+            <div onClick={stop} style={{ width: "100%", maxWidth: 540, maxHeight: "calc(100dvh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 24, padding: 28, boxShadow: "0 24px 60px rgba(16,24,40,0.3)", animation: "posPop .18s ease" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 22 }}>
+                <Dots />
+                <div onClick={close} className="pos-icon-btn" title="Overslaan" style={{ width: 32, height: 32, fontSize: 18 }}>{"✕"}</div>
+              </div>
+              {visual}
+              <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 6 }}>{title}</div>
+              <div style={{ fontSize: 14.5, color: "#667085", marginBottom: 18, lineHeight: 1.5 }}>{sub}</div>
+              {body}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 26 }}>
+                {tourStep > 0 ? (
+                  <div onClick={prev} style={{ fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer", padding: "8px 0" }}>← Vorige</div>
+                ) : (
+                  <div onClick={close} style={{ fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer", padding: "8px 0" }}>Overslaan</div>
+                )}
+                <div onClick={isLast ? close : next} style={{ height: 50, padding: "0 26px", borderRadius: 13, background: PURPLE, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
+                  {isLast ? "Aan de slag" : "Volgende"}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ───── Toast ───── */}
       {s.toast && (
         <div style={{ position: "absolute", left: "50%", bottom: 30, background: "#1D1B52", color: "#fff", padding: "14px 24px", borderRadius: 999, fontSize: 15, fontWeight: 600, boxShadow: "0 12px 30px rgba(16,24,40,0.28)", zIndex: 70, animation: "posToastUp .28s ease", transform: "translateX(-50%)" }}>{s.toast}</div>
@@ -2385,6 +2547,7 @@ export function PosPrototype() {
         setReservationsOn={setReservationsOn}
         productImagesOn={productImagesOn}
         setProductImagesOn={setProductImagesOn}
+        onShowTour={() => setTourStep(0)}
         kitchenOn={kitchenOn}
         setKitchenOn={(v) => {
           setKitchenOn(v);
@@ -2836,6 +2999,7 @@ function PosTweaks({
   setReservationsOn,
   productImagesOn,
   setProductImagesOn,
+  onShowTour,
   kitchenOn,
   setKitchenOn,
   posMode,
@@ -2854,6 +3018,7 @@ function PosTweaks({
   setReservationsOn: (v: boolean) => void;
   productImagesOn: boolean;
   setProductImagesOn: (v: boolean) => void;
+  onShowTour: () => void;
   posMode: "table" | "counter";
   setPosMode: (m: "table" | "counter") => void;
   onReset: () => void;
@@ -2871,6 +3036,9 @@ function PosTweaks({
       </div>
       <div className="pos-twk-body">
         <a className="pos-twk-link" href="#/">← All prototypes</a>
+
+        <div className="pos-twk-sect">Onboarding</div>
+        <button className="pos-twk-btn" onClick={onShowTour}>▶ Tour opnieuw bekijken</button>
 
         <div className="pos-twk-sect">Modus</div>
         <div className="pos-twk-seg">
