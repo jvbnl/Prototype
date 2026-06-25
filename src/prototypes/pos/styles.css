@@ -157,23 +157,6 @@
   flex-shrink: 0;
 }
 
-/* ── Lock / sign-in (start & switch of shift) ── */
-.pos-root .pos-profile {
-  transition: background 0.12s ease;
-}
-.pos-root .pos-profile:hover {
-  background: #fff;
-}
-.pos-root .pos-key {
-  transition: background 0.1s ease, transform 0.06s ease;
-}
-.pos-root .pos-key:hover {
-  background: #f9f5ff;
-}
-.pos-root .pos-key:active {
-  transform: scale(0.96);
-  background: #f4ebff;
-}
 
 /* ── Drawer count grid (start & end of shift) ── */
 /* Tap-to-add tile: tile = +1, the small minus button on it = −1. */
