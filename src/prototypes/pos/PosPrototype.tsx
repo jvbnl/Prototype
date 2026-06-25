@@ -13,7 +13,7 @@ import posCss from "./styles.css?raw";
    mobile (bottom-sheet cart, swipeable kitchen, stacked day report). */
 
 // ── Types ──────────────────────────────────────────────
-type Screen = "locked" | "start" | "floor" | "order" | "kitchen" | "orders" | "day" | "end";
+type Screen = "counter" | "cashier" | "start" | "floor" | "order" | "kitchen" | "orders" | "day" | "end";
 type Area = "bar" | "terras";
 type TableStatus = "free" | "occupied" | "reserved";
 type Station = "bar" | "keuken";
@@ -61,8 +61,9 @@ interface PosState {
   screen: Screen;
   shiftOpen: boolean;
   activeStaff: string;
-  pinUser: string | null;
-  pinValue: string;
+  selectedCounter: string | null;
+  cashierQuery: string;
+  selectedCashier: string | null;
   startCounts: CashCounts;
   endCounts: CashCounts;
   activeTableId: string | null;
@@ -152,12 +153,20 @@ const AREA_ORDER: Area[] = ["bar", "terras"];
 const AREA_LABELS: Record<Area, string> = { bar: "Bar", terras: "Terras" };
 const PURPLE = "#7000FF";
 
-// Staff profiles shown on the lock screen (start/switch of shift)
-const EMPLOYEES: { name: string; color: string }[] = [
-  { name: "Joel", color: PURPLE },
-  { name: "Sophie", color: "#E0457B" },
-  { name: "Lisa", color: "#2E9C8E" },
-  { name: "Daan", color: "#F79009" },
+// Registered counters (POS registers) — the start-shift flow opens on a
+// "Selecteer een kassa" picker, which is skipped when only one is registered.
+const COUNTERS: { id: string; name: string }[] = [
+  { id: "c1", name: "Kassa Bar" },
+  { id: "c2", name: "Kassa Terras" },
+  { id: "c3", name: "Balie" },
+];
+
+// Cashiers that can be linked to a shift (searched on the cashier-select step).
+const CASHIERS: { name: string; email: string; color: string }[] = [
+  { name: "Joel", email: "joel@gymly.io", color: PURPLE },
+  { name: "Sophie", email: "sophie@gymly.io", color: "#E0457B" },
+  { name: "Lisa", email: "lisa@gymly.io", color: "#2E9C8E" },
+  { name: "Daan", email: "daan@gymly.io", color: "#F79009" },
 ];
 
 // Euro denominations for counting the drawer at start/end of shift
@@ -209,11 +218,13 @@ function tlabel(t?: TableT | null): string {
 function makeInitialState(): PosState {
   const now = Date.now();
   return {
-    screen: "locked",
+    // Skip the counter picker when only one register exists.
+    screen: COUNTERS.length > 1 ? "counter" : "cashier",
     shiftOpen: false,
     activeStaff: "Joel",
-    pinUser: null,
-    pinValue: "",
+    selectedCounter: COUNTERS.length === 1 ? COUNTERS[0].id : null,
+    cashierQuery: "",
+    selectedCashier: null,
     startCounts: { "50": 1, "20": 2, "10": 1 }, // tidy €100 opening float
     endCounts: {},
     activeTableId: null,
@@ -473,19 +484,6 @@ export function PosPrototype() {
     };
   }, []);
 
-  // PIN complete (4 digits) → continue to "Dienst starten", or straight to the
-  // floor when switching user while a shift is already open.
-  useEffect(() => {
-    if (s.screen !== "locked" || !s.pinUser || s.pinValue.length !== 4) return;
-    const t = setTimeout(() => {
-      setS((cur) =>
-        cur.shiftOpen
-          ? { ...cur, activeStaff: cur.pinUser || cur.activeStaff, screen: "floor", pinUser: null, pinValue: "" }
-          : { ...cur, screen: "start" }
-      );
-    }, 200);
-    return () => clearTimeout(t);
-  }, [s.screen, s.pinUser, s.pinValue, s.shiftOpen]);
 
   const setToast = (msg: string) => {
     patch({ toast: msg });
@@ -526,16 +524,24 @@ export function PosPrototype() {
     if (cont && el) cont.scrollTo({ top: Math.max(0, el.offsetTop - 8), behavior: "smooth" });
   };
 
-  // ── Shift / lock (start & end of day) ──
-  const selectPinUser = (name: string) => patch({ pinUser: name, pinValue: "" });
-  const pinCancel = () => patch({ pinUser: null, pinValue: "" });
-  const pinBack = () => patch((st) => ({ pinValue: st.pinValue.slice(0, -1) }));
-  const pinPress = (d: string) => patch((st) => (st.pinValue.length >= 4 ? {} : { pinValue: st.pinValue + d }));
+  // ── Shift start flow: counter → cashier → tellen (count) ──
+  const firstShiftScreen = (): Screen => (COUNTERS.length > 1 ? "counter" : "cashier");
+  const selectCounter = (id: string) => patch({ selectedCounter: id });
+  const confirmCounter = () => {
+    if (!s.selectedCounter) return;
+    patch({ screen: "cashier" });
+  };
+  const selectCashier = (name: string) => patch({ selectedCashier: name });
+  const clearCashier = () => patch({ selectedCashier: null, cashierQuery: "" });
+  const confirmCashier = () => {
+    if (!s.selectedCashier) return;
+    patch({ activeStaff: s.selectedCashier, screen: "start" });
+  };
   const setStartCount = (key: string, n: number) => patch((st) => ({ startCounts: { ...st.startCounts, [key]: n } }));
   const confirmStart = () => {
-    const nm = s.pinUser || s.activeStaff;
+    const nm = s.selectedCashier || s.activeStaff;
     setCartSheetOpen(false);
-    patch({ shiftOpen: true, activeStaff: nm, screen: "floor", pinUser: null, pinValue: "" });
+    patch({ shiftOpen: true, activeStaff: nm, screen: "floor", cashierQuery: "" });
     if (posMode === "counter") setTimeout(startNewCounterOrder, 0);
     setToast("Dienst gestart · " + nm);
   };
@@ -544,7 +550,14 @@ export function PosPrototype() {
   const confirmEnd = () => {
     const nm = s.activeStaff;
     setCartSheetOpen(false);
-    patch({ shiftOpen: false, screen: "locked", pinUser: null, pinValue: "", endCounts: {} });
+    patch({
+      shiftOpen: false,
+      screen: firstShiftScreen(),
+      selectedCounter: COUNTERS.length === 1 ? COUNTERS[0].id : null,
+      selectedCashier: null,
+      cashierQuery: "",
+      endCounts: {},
+    });
     setToast("Dienst afgesloten · " + nm);
   };
 
@@ -1075,59 +1088,113 @@ export function PosPrototype() {
   // ── Render ──
   return (
     <div className="pos-root">
-      {/* ───── Locked / sign-in (start of shift) ───── */}
-      {s.screen === "locked" && (
-        <div className="pos-screen" style={{ alignItems: "center", justifyContent: "center", background: "#F9FAFB", padding: 40 }}>
-          <img src="/prototypes/pos/location-logo.svg" alt={locationName} style={{ height: 34, display: "block", marginBottom: 8 }} />
-          <div style={{ fontSize: 14, color: "#98A2B3", fontWeight: 500, marginBottom: 38 }}>Point of Sale</div>
-          {s.pinUser ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-              <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 6 }}>Hoi {s.pinUser}</div>
-              <div style={{ fontSize: 14, color: "#667085", marginBottom: 24 }}>Voer je pincode in</div>
-              <div style={{ display: "flex", gap: 14, marginBottom: 28 }}>
-                {[0, 1, 2, 3].map((i) => (
-                  <div key={i} style={{ width: 14, height: 14, borderRadius: "50%", background: i < s.pinValue.length ? PURPLE : "transparent", border: "2px solid " + (i < s.pinValue.length ? PURPLE : "#D0D5DD") }} />
-                ))}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 84px)", gap: 12 }}>
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "back"].map((d, i) => (
-                  <div
-                    key={i}
-                    onClick={() => { if (d === "back") pinBack(); else if (d !== "") pinPress(d); }}
-                    className={d === "" ? undefined : "pos-key"}
-                    style={{ height: 64, borderRadius: 16, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 600, cursor: d === "" ? "default" : "pointer", background: d === "" ? "transparent" : "#fff", border: d === "" ? "none" : "1px solid #EAECF0", color: "#101828", userSelect: "none" }}
-                  >
-                    {d === "back" ? "⌫" : d}
-                  </div>
-                ))}
-              </div>
-              <div onClick={pinCancel} style={{ marginTop: 24, fontSize: 14, fontWeight: 600, color: "#667085", cursor: "pointer" }}>Annuleren</div>
-            </div>
-          ) : (
-            <>
-              <div style={{ fontSize: 15, fontWeight: 600, color: "#475467", marginBottom: 22 }}>Kies je profiel om in te loggen</div>
-              <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center" }}>
-                {EMPLOYEES.map((e, idx) => {
-                  const name = idx === 0 ? staffName || e.name : e.name;
+      {/* ───── Start shift · step 1: select a counter ───── */}
+      {s.screen === "counter" && (
+        <div className="pos-screen" style={{ background: "#F9FAFB", overflow: "auto", padding: 24 }}>
+          <div style={{ width: "min(460px, 100%)", margin: "auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <img src="/prototypes/pos/location-logo.svg" alt={locationName} style={{ height: 30, display: "block", marginBottom: 6 }} />
+            <div style={{ fontSize: 13, color: "#98A2B3", fontWeight: 500, marginBottom: 26 }}>Point of Sale</div>
+            <div style={{ width: "100%", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 26, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
+              <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Selecteer een kassa</div>
+              <div style={{ fontSize: 14, color: "#667085", marginBottom: 20 }}>Kies de kassa waarop je deze dienst draait.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 22 }}>
+                {COUNTERS.map((c) => {
+                  const on = s.selectedCounter === c.id;
                   return (
-                    <div key={e.name} onClick={() => selectPinUser(name)} className="pos-profile" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 11, cursor: "pointer", padding: "16px 22px", borderRadius: 18 }}>
-                      <div style={{ width: 64, height: 64, borderRadius: "50%", background: e.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, fontWeight: 700 }}>{(name[0] || "?").toUpperCase()}</div>
-                      <span style={{ fontSize: 15, fontWeight: 600, color: "#101828" }}>{name}</span>
+                    <div
+                      key={c.id}
+                      onClick={() => selectCounter(c.id)}
+                      className="pos-hover-row"
+                      style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 14, border: "1.5px solid " + (on ? PURPLE : "#E4E7EC"), background: on ? "#F9F5FF" : "#fff", cursor: "pointer", minHeight: 60 }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: "#101828" }}>{c.name}</div>
+                        <div style={{ fontSize: 13, color: "#667085" }}>{locationName}</div>
+                      </div>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", border: "2px solid " + (on ? PURPLE : "#D0D5DD"), display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        {on && <span style={{ width: 11, height: 11, borderRadius: "50%", background: PURPLE }} />}
+                      </span>
                     </div>
                   );
                 })}
               </div>
-            </>
-          )}
+              <div onClick={confirmCounter} style={{ height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(s.selectedCounter ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Volgende</div>
+            </div>
+          </div>
         </div>
       )}
+
+      {/* ───── Start shift · step 2: select the cashier ───── */}
+      {s.screen === "cashier" && (() => {
+        const sel = CASHIERS.find((c) => c.name === s.selectedCashier);
+        const q = s.cashierQuery.trim().toLowerCase();
+        const results = CASHIERS.filter((c) => !q || c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q));
+        return (
+          <div className="pos-screen" style={{ background: "#F9FAFB", overflow: "auto", padding: 24 }}>
+            <div style={{ width: "min(460px, 100%)", margin: "auto", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              <img src="/prototypes/pos/location-logo.svg" alt={locationName} style={{ height: 30, display: "block", marginBottom: 6 }} />
+              <div style={{ fontSize: 13, color: "#98A2B3", fontWeight: 500, marginBottom: 26 }}>Point of Sale</div>
+              <div style={{ width: "100%", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 26, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
+                {COUNTERS.length > 1 && (
+                  <div onClick={() => patch({ screen: "counter" })} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#667085", cursor: "pointer", marginBottom: 14 }}>
+                    <span style={{ fontSize: 16 }}>←</span> {COUNTERS.find((c) => c.id === s.selectedCounter)?.name || "Kassa"}
+                  </div>
+                )}
+                <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Selecteer medewerker</div>
+                <div style={{ fontSize: 14, color: "#667085", marginBottom: 18 }}>Koppel een medewerker aan deze dienst.</div>
+                {sel ? (
+                  <div style={{ display: "flex", alignItems: "center", border: "1.5px solid " + PURPLE, borderRadius: 12, height: 54, padding: "0 8px 0 14px", marginBottom: 16 }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, color: "#101828", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sel.name} ({sel.email})</span>
+                    <div onClick={clearCashier} className="pos-icon-btn" title="Wissen" style={{ width: 36, height: 36, flexShrink: 0 }}><XIcon /></div>
+                  </div>
+                ) : (
+                  <input
+                    autoFocus
+                    value={s.cashierQuery}
+                    onChange={(e) => patch({ cashierQuery: e.target.value })}
+                    placeholder="Zoek of koppel een medewerker…"
+                    style={{ width: "100%", height: 54, border: "1.5px solid #E4E7EC", borderRadius: 12, padding: "0 14px", fontSize: 15, color: "#101828", outline: "none", marginBottom: 14 }}
+                  />
+                )}
+                {sel ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid #EAECF0", borderRadius: 14, padding: "12px 14px", marginBottom: 22 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: sel.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>{sel.name[0].toUpperCase()}</div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{sel.name}</div>
+                      <div style={{ fontSize: 13, color: "#667085" }}>{sel.email}</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 22 }}>
+                    {results.length ? results.map((c) => (
+                      <div key={c.name} onClick={() => selectCashier(c.name)} className="pos-hover-row" style={{ display: "flex", alignItems: "center", gap: 12, border: "1px solid #EAECF0", borderRadius: 14, padding: "10px 14px", cursor: "pointer", minHeight: 56 }}>
+                        <div style={{ width: 40, height: 40, borderRadius: "50%", background: c.color, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, flexShrink: 0 }}>{c.name[0].toUpperCase()}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontWeight: 700, color: "#101828" }}>{c.name}</div>
+                          <div style={{ fontSize: 13, color: "#667085" }}>{c.email}</div>
+                        </div>
+                      </div>
+                    )) : (
+                      <div style={{ fontSize: 14, color: "#98A2B3", padding: "12px 2px" }}>Geen medewerker gevonden.</div>
+                    )}
+                  </div>
+                )}
+                <div onClick={confirmCashier} style={{ height: 54, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, fontWeight: 700, ...(sel ? { background: PURPLE, color: "#fff", cursor: "pointer" } : { background: "#F2F4F7", color: "#98A2B3", cursor: "default" }) }}>Volgende</div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ───── Start shift (count opening float) ───── */}
       {s.screen === "start" && (
         <div className="pos-screen" style={{ background: "#F9FAFB", overflow: "auto", padding: 24 }}>
           <div style={{ width: "min(560px, 100%)", margin: "auto", background: "#fff", border: "1px solid #EAECF0", borderRadius: 24, padding: 30, boxShadow: "0 1px 3px rgba(16,24,40,0.05)" }}>
+            <div onClick={() => patch({ screen: "cashier" })} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#667085", cursor: "pointer", marginBottom: 14 }}>
+              <span style={{ fontSize: 16 }}>←</span> Medewerker
+            </div>
             <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>Dienst starten</div>
-            <div style={{ fontSize: 14, color: "#667085", marginBottom: 22 }}>Welkom {s.pinUser || displayStaff} · tel het startgeld in de lade.</div>
+            <div style={{ fontSize: 14, color: "#667085", marginBottom: 22 }}>Welkom {s.selectedCashier || displayStaff} · tel het startgeld in de lade.</div>
             <CashCountGrid counts={s.startCounts} onSet={setStartCount} />
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid #F2F4F7", marginTop: 18, paddingTop: 16, marginBottom: 20 }}>
               <span style={{ fontSize: 14, color: "#475467", fontWeight: 600 }}>Startgeld (wisselgeld)</span>
@@ -2516,7 +2583,7 @@ function PosTweaks({
 
         <div className="pos-twk-sect">Scherm</div>
         <div className="pos-twk-seg">
-          {([["locked", "Lock"], ["start", "Start"], ["floor", "Vloer"], ["kitchen", "Keuken"], ["orders", "Orders"], ["day", "Dag"], ["end", "Eind"]] as const).map(([k, label]) => (
+          {([["counter", "Kassa"], ["cashier", "Cashier"], ["start", "Tellen"], ["floor", "Vloer"], ["kitchen", "Keuken"], ["orders", "Orders"], ["day", "Dag"], ["end", "Eind"]] as const).map(([k, label]) => (
             <button key={k} className={screen === k ? "on" : ""} onClick={() => setScreen(k)}>{label}</button>
           ))}
         </div>
