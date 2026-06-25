@@ -466,6 +466,8 @@ export function PosPrototype() {
   // acties), and a "counter" / quick-service variant for take-away counters
   // where there are no tables — every order is a fresh walk-in.
   const [posMode, setPosMode] = useState<"table" | "counter">("table");
+  // Feature flag: reservations are out of scope for v1, off by default.
+  const [reservationsOn, setReservationsOn] = useState(false);
   const [counterSeq, setCounterSeq] = useState(0);
   const [s, setS] = useState<PosState>(makeInitialState);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
@@ -1242,10 +1244,12 @@ export function PosPrototype() {
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#fff", border: "1.5px solid #E4E7EC" }} />} text={`${countFree} vrij`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#F4EBFF", border: "1.5px solid " + PURPLE }} />} text={`${countOcc} bezet`} />
               <Legend dot={<span style={{ width: 11, height: 11, borderRadius: "50%", background: "#FFFBF4", border: "1.5px dashed #F79009" }} />} text={`${countRes} gereserveerd`} />
-              <div onClick={openResModal} className="pos-reserveer-btn" style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
-                <span className="pos-reserveer-label">Reserveren</span>
-              </div>
+              {reservationsOn && (
+                <div onClick={openResModal} className="pos-reserveer-btn" style={{ display: "flex", alignItems: "center", gap: 8, background: "#fff", border: "1px solid #D0D5DD", color: "#344054", padding: "9px 16px", borderRadius: 12, fontSize: 14, fontWeight: 600, cursor: "pointer", marginLeft: 8 }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5" /><path d="M3.5 9.5h17M8 3v4M16 3v4" /></svg>
+                  <span className="pos-reserveer-label">Reserveren</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1671,7 +1675,7 @@ export function PosPrototype() {
       })()}
 
       {/* ───── Reserve (global, from floor "Reserveren" button) ───── */}
-      {s.showReserve && (() => {
+      {s.showReserve && reservationsOn && (() => {
         const can = s.rmName.trim().length > 0;
         const tableOptions = s.tables.filter((t) => t.area === s.rmArea && t.status === "free");
         const tablesHint = s.rmTables.length
@@ -2104,6 +2108,8 @@ export function PosPrototype() {
         setLocationName={setLocationName}
         staffName={staffName}
         setStaffName={setStaffName}
+        reservationsOn={reservationsOn}
+        setReservationsOn={setReservationsOn}
         posMode={posMode}
         setPosMode={(m) => {
           setPosMode(m);
@@ -2546,6 +2552,8 @@ function PosTweaks({
   setLocationName,
   staffName,
   setStaffName,
+  reservationsOn,
+  setReservationsOn,
   posMode,
   setPosMode,
   onReset,
@@ -2556,6 +2564,8 @@ function PosTweaks({
   setLocationName: (v: string) => void;
   staffName: string;
   setStaffName: (v: string) => void;
+  reservationsOn: boolean;
+  setReservationsOn: (v: boolean) => void;
   posMode: "table" | "counter";
   setPosMode: (m: "table" | "counter") => void;
   onReset: () => void;
@@ -2578,6 +2588,13 @@ function PosTweaks({
         <div className="pos-twk-seg">
           {([["table", "Tafels"], ["counter", "Counter"]] as const).map(([k, label]) => (
             <button key={k} className={posMode === k ? "on" : ""} onClick={() => setPosMode(k)}>{label}</button>
+          ))}
+        </div>
+
+        <div className="pos-twk-sect">Features</div>
+        <div className="pos-twk-seg">
+          {([[false, "Reserveringen uit"], [true, "Aan"]] as const).map(([v, label]) => (
+            <button key={String(v)} className={reservationsOn === v ? "on" : ""} onClick={() => setReservationsOn(v)}>{label}</button>
           ))}
         </div>
 
