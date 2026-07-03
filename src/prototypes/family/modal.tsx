@@ -1,14 +1,8 @@
-// "Add family member" modal: toggle between linking an existing member
-// ("Bestaand lid") and creating a new one ("Nieuw aanmaken"), pick a relation,
-// and confirm. Billing details are inherited from the main account.
-
-import { RELATIONS } from "./data";
+// "Add family member" modal: search an existing member to pre-fill the name
+// fields, or just type a new member's name. Billing details are always
+// inherited from the main account.
 
 interface ModalProps {
-  modeSearch: boolean;
-  modeNew: boolean;
-  onModeSearch: () => void;
-  onModeNew: () => void;
   query: string;
   onQuery: (v: string) => void;
   results: { name: string; email: string; grad: string; initials: string; onSelect: () => void }[];
@@ -17,31 +11,16 @@ interface ModalProps {
   hasSelection: boolean;
   selName: string;
   selEmail: string;
-  selGrad: string;
-  selInitials: string;
   onClearSelection: () => void;
   first: string;
   onFirst: (v: string) => void;
   last: string;
   onLast: (v: string) => void;
-  onRelation: (v: string) => void;
   onClose: () => void;
   onAdd: () => void;
 }
 
 export function AddMemberModal(p: ModalProps) {
-  const tab = (active: boolean): React.CSSProperties => ({
-    flex: 1,
-    textAlign: "center",
-    padding: 9,
-    borderRadius: 8,
-    font: "600 13px system-ui",
-    cursor: "pointer",
-    color: active ? "#18181B" : "#71717A",
-    background: active ? "#fff" : "transparent",
-    boxShadow: active ? "0 1px 2px rgba(0,0,0,.10)" : "none",
-  });
-
   return (
     <div
       onClick={p.onClose}
@@ -93,185 +72,136 @@ export function AddMemberModal(p: ModalProps) {
         </div>
 
         <div style={{ padding: 22, display: "flex", flexDirection: "column", gap: 16, maxHeight: "60vh", overflowY: "auto" }}>
-          {/* mode toggle */}
-          <div style={{ display: "flex", gap: 4, background: "#F4F4F5", borderRadius: 11, padding: 4 }}>
-            <div onClick={p.onModeSearch} style={tab(p.modeSearch)}>
-              Bestaand lid
+          {/* search existing member */}
+          <div>
+            <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>Zoek bestaand lid</div>
+            <div style={{ position: "relative" }}>
+              <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", display: "flex" }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="1.8" strokeLinecap="round">
+                  <circle cx="11" cy="11" r="7" />
+                  <path d="M21 21l-4-4" />
+                </svg>
+              </span>
+              <input
+                className="fam-input"
+                value={p.query}
+                onChange={(e) => p.onQuery(e.target.value)}
+                placeholder="Naam of e-mail…"
+                style={{
+                  width: "100%",
+                  border: "1px solid #E4E4E7",
+                  borderRadius: 9,
+                  padding: "11px 13px 11px 38px",
+                  font: "400 14px system-ui",
+                  color: "#18181B",
+                  outline: "none",
+                }}
+              />
             </div>
-            <div onClick={p.onModeNew} style={tab(p.modeNew)}>
-              Nieuw aanmaken
+            <div style={{ font: "400 12px system-ui", color: "#A1A1AA", marginTop: 7 }}>
+              Vind een bestaand lid om de gegevens hieronder automatisch over te nemen.
             </div>
+
+            {p.showResults && (
+              <div style={{ marginTop: 8, border: "1px solid #EFEFF1", borderRadius: 10, overflow: "hidden", maxHeight: 184, overflowY: "auto" }}>
+                {p.results.map((r, i) => (
+                  <div
+                    key={i}
+                    onClick={r.onSelect}
+                    className="fam-hover-row"
+                    style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderBottom: "1px solid #F4F4F5" }}
+                  >
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: "50%",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        color: "#fff",
+                        font: "600 11px system-ui",
+                        flex: "none",
+                        background: r.grad,
+                      }}
+                    >
+                      {r.initials}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ font: "600 13px system-ui", color: "#18181B" }}>{r.name}</div>
+                      <div style={{ font: "400 12px system-ui", color: "#A1A1AA" }}>{r.email}</div>
+                    </div>
+                    <span style={{ font: "600 12px system-ui", color: "#7A3FF2" }}>Kies</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {p.noResults && (
+              <div
+                style={{
+                  marginTop: 8,
+                  border: "1px dashed #E4E4E7",
+                  borderRadius: 10,
+                  padding: 14,
+                  textAlign: "center",
+                  font: "400 13px system-ui",
+                  color: "#A1A1AA",
+                }}
+              >
+                Geen bestaand lid gevonden — vul de gegevens hieronder handmatig in.
+              </div>
+            )}
+
+            {p.hasSelection && (
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 9,
+                  border: "1px solid #E5DBFB",
+                  background: "#F6F1FE",
+                  borderRadius: 10,
+                  padding: "10px 13px",
+                }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7A3FF2" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ font: "600 13px system-ui", color: "#18181B" }}>Gegevens overgenomen van {p.selName}</div>
+                  <div style={{ font: "400 12px system-ui", color: "#7C6BA0" }}>{p.selEmail}</div>
+                </div>
+                <div onClick={p.onClearSelection} style={{ font: "600 13px system-ui", color: "#7A3FF2", cursor: "pointer" }}>
+                  Wissen
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* SEARCH existing member */}
-          {p.modeSearch && (
-            <div>
-              <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>Zoek lid</div>
-              <div style={{ position: "relative" }}>
-                <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", display: "flex" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="1.8" strokeLinecap="round">
-                    <circle cx="11" cy="11" r="7" />
-                    <path d="M21 21l-4-4" />
-                  </svg>
-                </span>
-                <input
-                  className="fam-input"
-                  value={p.query}
-                  onChange={(e) => p.onQuery(e.target.value)}
-                  placeholder="Naam of e-mail…"
-                  style={{
-                    width: "100%",
-                    border: "1px solid #E4E4E7",
-                    borderRadius: 9,
-                    padding: "11px 13px 11px 38px",
-                    font: "400 14px system-ui",
-                    color: "#18181B",
-                    outline: "none",
-                  }}
-                />
-              </div>
-
-              {p.showResults && (
-                <div style={{ marginTop: 8, border: "1px solid #EFEFF1", borderRadius: 10, overflow: "hidden", maxHeight: 184, overflowY: "auto" }}>
-                  {p.results.map((r, i) => (
-                    <div
-                      key={i}
-                      onClick={r.onSelect}
-                      className="fam-hover-row"
-                      style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderBottom: "1px solid #F4F4F5" }}
-                    >
-                      <div
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "50%",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#fff",
-                          font: "600 11px system-ui",
-                          flex: "none",
-                          background: r.grad,
-                        }}
-                      >
-                        {r.initials}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ font: "600 13px system-ui", color: "#18181B" }}>{r.name}</div>
-                        <div style={{ font: "400 12px system-ui", color: "#A1A1AA" }}>{r.email}</div>
-                      </div>
-                      <span style={{ font: "600 12px system-ui", color: "#7A3FF2" }}>Kies</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {p.noResults && (
-                <div
-                  style={{
-                    marginTop: 8,
-                    border: "1px dashed #E4E4E7",
-                    borderRadius: 10,
-                    padding: 14,
-                    textAlign: "center",
-                    font: "400 13px system-ui",
-                    color: "#A1A1AA",
-                  }}
-                >
-                  Geen lid gevonden. Maak in plaats daarvan een{" "}
-                  <span onClick={p.onModeNew} style={{ color: "#7A3FF2", fontWeight: 600, cursor: "pointer" }}>
-                    nieuw familielid
-                  </span>{" "}
-                  aan.
-                </div>
-              )}
-
-              {p.hasSelection && (
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 11,
-                    border: "1.5px solid #7A3FF2",
-                    background: "#F6F1FE",
-                    borderRadius: 10,
-                    padding: "11px 13px",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: "50%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "#fff",
-                      font: "600 12px system-ui",
-                      flex: "none",
-                      background: p.selGrad,
-                    }}
-                  >
-                    {p.selInitials}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: "600 13px system-ui", color: "#18181B" }}>{p.selName}</div>
-                    <div style={{ font: "400 12px system-ui", color: "#7C6BA0" }}>{p.selEmail}</div>
-                  </div>
-                  <div onClick={p.onClearSelection} style={{ font: "600 13px system-ui", color: "#7A3FF2", cursor: "pointer" }}>
-                    Wijzig
-                  </div>
-                </div>
-              )}
+          {/* name fields */}
+          <div style={{ display: "flex", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>First name</div>
+              <input
+                className="fam-input"
+                value={p.first}
+                onChange={(e) => p.onFirst(e.target.value)}
+                placeholder="bv. Sophie"
+                style={inputStyle}
+              />
             </div>
-          )}
-
-          {/* NEW member */}
-          {p.modeNew && (
-            <div style={{ display: "flex", gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>First name</div>
-                <input
-                  className="fam-input"
-                  value={p.first}
-                  onChange={(e) => p.onFirst(e.target.value)}
-                  placeholder="bv. Sophie"
-                  style={inputStyle}
-                />
-              </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>Last name</div>
-                <input
-                  className="fam-input"
-                  value={p.last}
-                  onChange={(e) => p.onLast(e.target.value)}
-                  placeholder="bv. Koopmans"
-                  style={inputStyle}
-                />
-              </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>Last name</div>
+              <input
+                className="fam-input"
+                value={p.last}
+                onChange={(e) => p.onLast(e.target.value)}
+                placeholder="bv. Koopmans"
+                style={inputStyle}
+              />
             </div>
-          )}
-
-          <div>
-            <div style={{ font: "600 12px system-ui", color: "#52525B", marginBottom: 6 }}>Relatie</div>
-            <select
-              onChange={(e) => p.onRelation(e.target.value)}
-              style={{
-                width: "100%",
-                border: "1px solid #E4E4E7",
-                borderRadius: 9,
-                padding: "11px 13px",
-                font: "400 14px system-ui",
-                color: "#18181B",
-                outline: "none",
-                background: "#fff",
-              }}
-            >
-              {RELATIONS.map((r) => (
-                <option key={r}>{r}</option>
-              ))}
-            </select>
           </div>
 
           <div style={{ background: "#FAFAFB", border: "1px solid #EFEFF1", borderRadius: 12, padding: 16 }}>

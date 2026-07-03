@@ -21,8 +21,6 @@ export const POOL: PoolPerson[] = [
   { name: "Noa Smit", email: "noa.smit@gmail.com", grad: GRADS[0] },
 ];
 
-export const RELATIONS = ["Dochter", "Zoon", "Partner", "Ouder", "Overig familielid"];
-
 /** Preset family the tweaks panel seeds for its "filled" states. */
 export const SEED: Member[] = [
   { name: "Sophie Koopmans", relation: "Dochter", grad: GRADS[0] },
