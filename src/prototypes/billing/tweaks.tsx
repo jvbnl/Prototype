@@ -1,5 +1,10 @@
 import { useState } from "react";
-import type { AccountState, SupportKey, UpsellMode } from "./data";
+import type {
+  AccountState,
+  BillingCycle,
+  SupportKey,
+  UpsellMode,
+} from "./data";
 
 export type Tweaks = {
   accountState: AccountState;
@@ -18,6 +23,8 @@ export const TWEAK_DEFAULTS: Tweaks = {
 export function TweaksPanel({
   tweaks,
   setTweak,
+  cycle,
+  setCycle,
   onOpenPlan,
   onOpenSupport,
   onOpenUpgrade,
@@ -26,6 +33,8 @@ export function TweaksPanel({
 }: {
   tweaks: Tweaks;
   setTweak: <K extends keyof Tweaks>(k: K, v: Tweaks[K]) => void;
+  cycle: BillingCycle;
+  setCycle: (c: BillingCycle) => void;
   onOpenPlan: () => void;
   onOpenSupport: () => void;
   onOpenUpgrade: () => void;
@@ -80,6 +89,24 @@ export function TweaksPanel({
             <option value="past-due">Past-due (failed payment)</option>
             <option value="downgrade-pending">Downgrade pending</option>
           </select>
+        </div>
+
+        <div className="twk-sect">Billing cycle</div>
+        <div className="twk-row">
+          <label className="twk-lbl">
+            <span>Active cycle</span>
+          </label>
+          <div className="twk-seg">
+            {(["monthly", "yearly"] as const).map((c) => (
+              <button
+                key={c}
+                className={cycle === c ? "on" : ""}
+                onClick={() => setCycle(c)}
+              >
+                {c === "monthly" ? "Monthly" : "Yearly"}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="twk-sect">Upsell prominence</div>

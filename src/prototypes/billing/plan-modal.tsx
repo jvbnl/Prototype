@@ -1,12 +1,21 @@
-import { useState } from "react";
-import { CURRENT_PLAN_KEY, PLANS } from "./data";
-import type { PlanKey } from "./data";
+import { useEffect, useState } from "react";
+import {
+  CURRENT_PLAN_KEY,
+  PLANS,
+  YEARLY_DISCOUNT_PCT,
+  planPrice,
+  yearlySavings,
+  yearlyTotal,
+} from "./data";
+import type { BillingCycle, PlanKey } from "./data";
 import { E } from "./utils";
+import { CycleToggle, FeatureMatrix } from "./feature-matrix";
 
 // Reference patterns: Notion / Linear / Shopify plan pickers and Lenny's
-// pricing-page write-ups — show 2–3 KEY differentiators per plan, not a full
-// feature list. Usage-based rates apply universally so they live in a shared
-// "All plans" block below the cards.
+// pricing-page write-ups — keep the cards focused on the 3 KEY differentiators
+// (locations, family/org accounts, advanced reports). The full Feature Matrix
+// is exposed as a collapsible block beneath the picker so people who want to
+// compare can, without bloating the default view.
 const DIFFS: Record<PlanKey, { k: string; v: string }[]> = {
   studio: [
     { k: "Locations", v: "1" },
@@ -25,27 +34,55 @@ const DIFFS: Record<PlanKey, { k: string; v: string }[]> = {
   ],
 };
 
+const PLAN_ORDER: PlanKey[] = ["studio", "starter", "pro"];
+
 export function PlanModal({
   open,
+  cycle,
+  initialCycle,
   onClose,
+  onCycleChange,
   onUpgrade,
   onDowngrade,
 }: {
   open: boolean;
+  cycle: BillingCycle;
+  initialCycle: BillingCycle | null;
   onClose: () => void;
+  onCycleChange: (c: BillingCycle) => void;
   onUpgrade: (k: PlanKey) => void;
   onDowngrade: (k: PlanKey) => void;
 }) {
   const [sel, setSel] = useState<PlanKey>(CURRENT_PLAN_KEY);
+  // Local preview cycle: the user can compare prices in the modal without
+  // committing. Confirming bubbles it back up via onCycleChange.
+  const [pickerCycle, setPickerCycle] = useState<BillingCycle>(cycle);
+  const [showMatrix, setShowMatrix] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSel(CURRENT_PLAN_KEY);
+      setPickerCycle(initialCycle ?? cycle);
+      setShowMatrix(false);
+    }
+  }, [open, initialCycle, cycle]);
+
   if (!open) return null;
 
   const currentKey = CURRENT_PLAN_KEY;
-  const today = sel === currentKey ? 0 : PLANS[sel].m * 0.6; // mock prorate
-  const planOrder: PlanKey[] = ["studio", "starter", "pro"];
-  const isUpgrade = planOrder.indexOf(sel) > planOrder.indexOf(currentKey);
+  const cycleChanged = pickerCycle !== cycle;
+  const planChanged = sel !== currentKey;
+  const isUpgrade = PLAN_ORDER.indexOf(sel) > PLAN_ORDER.indexOf(currentKey);
+  const today = planChanged ? planPrice(sel, pickerCycle) * 0.6 : 0; // mock prorate
+  const savings = yearlySavings(sel);
 
-  const onSwitch = () => {
-    if (sel === currentKey) return;
+  const onConfirm = () => {
+    if (!planChanged) {
+      if (cycleChanged) onCycleChange(pickerCycle);
+      onClose();
+      return;
+    }
+    onCycleChange(pickerCycle);
     if (isUpgrade) onUpgrade(sel);
     else onDowngrade(sel);
   };
@@ -57,26 +94,45 @@ export function PlanModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        style={{ maxWidth: 760 }}
+        style={{ maxWidth: 820 }}
       >
         <div className="modal-hd">
           <div>
             <h2>Change plan</h2>
-            <div className="small muted">Currently on Gymly {PLANS[currentKey].name}</div>
+            <div className="small muted">
+              Currently on Gymly {PLANS[currentKey].name} ·{" "}
+              {cycle === "yearly" ? "billed yearly" : "billed monthly"}
+            </div>
           </div>
           <div className="gap-row">
-            <span className="small muted">All plans billed monthly</span>
+            <CycleToggle cycle={pickerCycle} onChange={setPickerCycle} />
             <button className="x" onClick={onClose} aria-label="Close">
               ✕
             </button>
           </div>
         </div>
         <div className="modal-body" style={{ padding: "22px 22px 18px" }}>
+          {pickerCycle === "yearly" && (
+            <div
+              className="banner info"
+              style={{ marginBottom: 18, padding: "10px 14px" }}
+            >
+              <span className="dot" />
+              <div className="body">
+                <p style={{ fontSize: 12.5 }}>
+                  Save {YEARLY_DISCOUNT_PCT}% by paying yearly. You'll be charged once
+                  up front and your monthly invoice drops to add-ons + usage only.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="plans" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-            {planOrder.map((k) => {
+            {PLAN_ORDER.map((k) => {
               const p = PLANS[k];
               const isCurrent = k === currentKey;
               const isSelected = sel === k;
+              const price = planPrice(k, pickerCycle);
               return (
                 <div
                   key={k}
@@ -113,11 +169,31 @@ export function PlanModal({
                   >
                     {p.tagline}
                   </div>
-                  <div className="price" style={{ fontSize: 19, lineHeight: 1.1 }}>
-                    {E(p.m)}
+                  <div
+                    className="price"
+                    style={{ fontSize: 19, lineHeight: 1.1 }}
+                  >
+                    {E(price)}
                     <small style={{ fontSize: 11 }}> /mo</small>
                   </div>
-                  <div className="small muted">Billed monthly</div>
+                  <div className="small muted">
+                    {pickerCycle === "yearly" ? (
+                      <>
+                        {E(yearlyTotal(k))}/yr ·{" "}
+                        <span style={{ color: "var(--accent)", fontWeight: 500 }}>
+                          save {E(yearlySavings(k))}/yr
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        Billed monthly ·{" "}
+                        <span className="strike">{E(p.m)}</span>{" "}
+                        <span style={{ color: "var(--accent)" }}>
+                          {E(p.y)} on yearly
+                        </span>
+                      </>
+                    )}
+                  </div>
                   <div style={{ height: 6 }} />
                   {DIFFS[k].map((d, i) => (
                     <div
@@ -138,6 +214,36 @@ export function PlanModal({
                 </div>
               );
             })}
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <button
+              type="button"
+              onClick={() => setShowMatrix((v) => !v)}
+              className="btn ghost"
+              style={{
+                padding: "6px 8px",
+                fontSize: 12.5,
+                color: "var(--ink-2)",
+              }}
+            >
+              {showMatrix ? "Hide" : "Compare"} all features {showMatrix ? "↑" : "↓"}
+            </button>
+            {showMatrix && (
+              <div style={{ marginTop: 10 }}>
+                <FeatureMatrix highlightKey={currentKey} />
+                <div
+                  className="small muted"
+                  style={{ marginTop: 8, lineHeight: 1.5 }}
+                >
+                  Looking for the Business plan? It's a high-touch tier with custom SLA,
+                  dedicated account manager and developer API.{" "}
+                  <a href="#" onClick={(e) => e.preventDefault()}>
+                    Contact sales ↗
+                  </a>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Usage rates — applies to all plans */}
@@ -165,10 +271,7 @@ export function PlanModal({
                   <span className="small muted">Payment processing</span>
                   <span className="mono" style={{ fontSize: 13 }}>
                     € 0,29{" "}
-                    <small
-                      className="muted"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
+                    <small className="muted" style={{ fontFamily: "var(--font-sans)" }}>
                       per transaction · iDEAL, SEPA, Bancontact, card
                     </small>
                   </span>
@@ -177,10 +280,7 @@ export function PlanModal({
                   <span className="small muted">Transactional email</span>
                   <span className="mono" style={{ fontSize: 13 }}>
                     Included{" "}
-                    <small
-                      className="muted"
-                      style={{ fontFamily: "var(--font-sans)" }}
-                    >
+                    <small className="muted" style={{ fontFamily: "var(--font-sans)" }}>
                       booking confirmations, reminders, receipts
                     </small>
                   </span>
@@ -188,28 +288,35 @@ export function PlanModal({
               </div>
             </div>
             <div className="small muted" style={{ marginTop: 6 }}>
-              Usage is metered as it happens and added to your monthly invoice — same on Studio,
-              Starter or Pro.
+              Usage is metered as it happens and added to your monthly invoice — same on
+              Studio, Starter or Pro.
             </div>
           </div>
         </div>
         <div className="modal-ft">
           <div className="stack-tight">
             <span className="small muted">
-              {sel === currentKey ? (
+              {!planChanged && !cycleChanged ? (
                 "No change selected."
-              ) : today > 0 && isUpgrade ? (
+              ) : !planChanged && cycleChanged ? (
+                pickerCycle === "yearly" ? (
+                  <>
+                    Switch to yearly · charged{" "}
+                    <b style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>
+                      {E(yearlyTotal(currentKey))}
+                    </b>{" "}
+                    today · saves {E(savings)}/year
+                  </>
+                ) : (
+                  <>Switch to monthly · takes effect on next renewal</>
+                )
+              ) : isUpgrade ? (
                 <>
                   Prorated charge today:{" "}
-                  <b
-                    style={{
-                      color: "var(--ink)",
-                      fontFamily: "var(--font-mono)",
-                    }}
-                  >
+                  <b style={{ color: "var(--ink)", fontFamily: "var(--font-mono)" }}>
                     {E(today)}
                   </b>{" "}
-                  · then {E(PLANS[sel].m)}/month
+                  · then {E(planPrice(sel, pickerCycle))}/month
                 </>
               ) : (
                 <>Takes effect end of period · Jun 1, 2026</>
@@ -225,10 +332,14 @@ export function PlanModal({
             </button>
             <button
               className="btn primary"
-              disabled={sel === currentKey}
-              onClick={onSwitch}
+              disabled={!planChanged && !cycleChanged}
+              onClick={onConfirm}
             >
-              {sel === currentKey ? "No change" : `Switch to ${PLANS[sel].name}`}
+              {!planChanged && !cycleChanged
+                ? "No change"
+                : !planChanged
+                  ? `Switch to ${pickerCycle === "yearly" ? "yearly" : "monthly"}`
+                  : `Switch to ${PLANS[sel].name}`}
             </button>
           </div>
         </div>

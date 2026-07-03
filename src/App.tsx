@@ -1,210 +1,92 @@
-import { useState } from "react";
-import { ADDONS_BASE, GYM, PLANS } from "./billing/data";
-import type { Addon, PlanKey } from "./billing/data";
-import { SettingsNav, StateBanner, Tabs, TopBar } from "./billing/chrome";
-import {
-  AddonsSection,
-  BillPreview,
-  CurrentPlan,
-  PaymentMethodSection,
-  SupportPlanSection,
-} from "./billing/overview";
-import { InvoicesSection } from "./billing/invoices";
-import { PlanModal } from "./billing/plan-modal";
-import { SupportPlanModal } from "./billing/support-modal";
-import { FlowModal } from "./billing/flow-modal";
-import type { FlowMode, FlowState } from "./billing/flow-modal";
-import { E } from "./billing/utils";
-import { TWEAK_DEFAULTS, TweaksPanel } from "./billing/tweaks";
-import type { Tweaks } from "./billing/tweaks";
+"use client";
+
+import { useEffect, useState } from "react";
+import { Home } from "./home/Home";
+import { getPrototype } from "./prototypes/registry";
+
+function readSlug(): string {
+  if (typeof window === "undefined") return "";
+  const hash = window.location.hash.replace(/^#\/?/, "");
+  return hash.trim();
+}
 
 export function App() {
-  const [tweaks, setTweaks] = useState<Tweaks>(TWEAK_DEFAULTS);
-  const setTweak = <K extends keyof Tweaks>(k: K, v: Tweaks[K]) =>
-    setTweaks((t) => ({ ...t, [k]: v }));
+  const [slug, setSlug] = useState<string>("");
+  const [hydrated, setHydrated] = useState(false);
 
-  const [addons, setAddons] = useState<Addon[]>(ADDONS_BASE);
-  const [tab, setTab] = useState<string>("Summary");
-  const [planOpen, setPlanOpen] = useState(false);
-  const [supportOpen, setSupportOpen] = useState(false);
-  const [flow, setFlow] = useState<FlowState>({
-    open: false,
-    mode: null,
-    targetTier: null,
-  });
+  useEffect(() => {
+    setSlug(readSlug());
+    setHydrated(true);
+    const onHash = () => setSlug(readSlug());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
-  const openFlow = (mode: FlowMode, targetTier: PlanKey | null) => {
-    setPlanOpen(false);
-    setFlow({ open: true, mode, targetTier });
-  };
-  const closeFlow = () => setFlow({ open: false, mode: null, targetTier: null });
+  useEffect(() => {
+    if (!hydrated) return;
+    document.title = slug
+      ? `${getPrototype(slug)?.title ?? "Not found"} · Prototypes`
+      : "Prototypes";
+  }, [slug, hydrated]);
 
+  // SSR pass renders the Home shell so the markup the server emits is meaningful
+  // even before the hash is read on the client.
+  if (!hydrated || !slug) return <Home />;
+
+  const proto = getPrototype(slug);
+  if (!proto) return <NotFound slug={slug} />;
+
+  const Comp = proto.component;
+  return <Comp />;
+}
+
+function NotFound({ slug }: { slug: string }) {
   return (
-    <>
-      <div className="wf-stamp">
-        <span>
-          <b>WIREFRAME</b> · Gymly Billing · Variant A — Strak/zakelijk · mid-fi greyscale
-        </span>
-        <span className="right">
-          All four states · upsell prominence toggleable via Tweaks ↘
-        </span>
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "grid",
+        placeItems: "center",
+        background: "#fafaf8",
+        fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+        color: "#1a1a1a",
+        padding: 24,
+      }}
+    >
+      <div style={{ textAlign: "center", maxWidth: 380 }}>
+        <div
+          style={{
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "#908d86",
+            marginBottom: 8,
+          }}
+        >
+          404
+        </div>
+        <h1 style={{ fontSize: 26, fontWeight: 600, margin: "0 0 8px" }}>
+          Prototype not found
+        </h1>
+        <p style={{ color: "#5c5a55", margin: "0 0 20px" }}>
+          No prototype is registered under <code>{slug}</code>.
+        </p>
+        <a
+          href="#/"
+          style={{
+            display: "inline-flex",
+            padding: "8px 16px",
+            background: "#1a1a1a",
+            color: "#fff",
+            textDecoration: "none",
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+          }}
+        >
+          ← Back to prototypes
+        </a>
       </div>
-      <div className="app">
-        <SettingsNav />
-        <main className="main">
-          <TopBar />
-          <h1 className="page-title">Billing</h1>
-          <p className="page-sub">
-            Plan, add-ons, usage, invoices and payment method for {GYM.name}.
-          </p>
-          <Tabs tab={tab} setTab={setTab} />
-
-          <div style={{ height: 22 }} />
-
-          {tab === "Summary" && (
-            <>
-              <StateBanner state={tweaks.accountState} />
-              <CurrentPlan
-                state={tweaks.accountState}
-                onManage={() => setPlanOpen(true)}
-                onViewAll={() => setTab("Plans")}
-              />
-              <div style={{ height: 26 }} />
-              <BillPreview
-                addons={addons}
-                showAnnotations={tweaks.showAnnotations}
-              />
-              <SupportPlanSection
-                currentKey={tweaks.supportKey}
-                onOpen={() => setSupportOpen(true)}
-                showAnnotations={tweaks.showAnnotations}
-              />
-              <AddonsSection
-                addons={addons}
-                setAddons={setAddons}
-                upsellMode={tweaks.upsellMode}
-                showAnnotations={tweaks.showAnnotations}
-              />
-              <PaymentMethodSection
-                state={tweaks.accountState}
-                showAnnotations={tweaks.showAnnotations}
-              />
-              <div
-                className="section"
-                style={{
-                  borderTop: "1px solid var(--line-2)",
-                  paddingTop: 20,
-                  marginTop: 20,
-                }}
-              >
-                <div className="spread">
-                  <div className="stack-tight">
-                    <div className="small muted">Need to step away?</div>
-                    <button
-                      onClick={() => openFlow("cancel", null)}
-                      style={{
-                        padding: 0,
-                        background: "none",
-                        border: "none",
-                        color: "var(--ink-2)",
-                        textDecoration: "underline",
-                        textUnderlineOffset: 3,
-                        fontSize: 13,
-                        cursor: "pointer",
-                        textAlign: "left",
-                      }}
-                    >
-                      Cancel subscription →
-                    </button>
-                  </div>
-                  <span className="small muted">
-                    You'll keep full access until the end of the period.
-                  </span>
-                </div>
-              </div>
-            </>
-          )}
-
-          {tab === "Invoices" && (
-            <>
-              <StateBanner state={tweaks.accountState} />
-              <InvoicesSection state={tweaks.accountState} />
-              <div style={{ height: 30 }} />
-              <PaymentMethodSection
-                state={tweaks.accountState}
-                showAnnotations={false}
-              />
-            </>
-          )}
-
-          {tab === "Plans" && (
-            <div className="section">
-              <div className="sect-head">
-                <div>
-                  <h2>Plans</h2>
-                  <div className="sub">
-                    Compare base plans. Switching is handled in the "Change plan" modal.
-                  </div>
-                </div>
-                <div className="right">
-                  <button
-                    className="btn primary"
-                    onClick={() => setPlanOpen(true)}
-                  >
-                    Open change-plan flow
-                  </button>
-                </div>
-              </div>
-              <div className="card" style={{ padding: 20 }}>
-                <div
-                  className="plans"
-                  style={{ gridTemplateColumns: "repeat(3, 1fr)" }}
-                >
-                  {(Object.keys(PLANS) as PlanKey[]).map((k) => {
-                    const p = PLANS[k];
-                    return (
-                      <div key={k} className="planopt">
-                        <div className="name">{p.name}</div>
-                        <div className="price">
-                          {E(p.m)} <small>/month</small>
-                        </div>
-                        <div className="small muted">Billed monthly</div>
-                        <ul>
-                          <li>Locations: {p.locations}</li>
-                          <li className="muted">{p.tagline}</li>
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      <PlanModal
-        open={planOpen}
-        onClose={() => setPlanOpen(false)}
-        onUpgrade={(k) => openFlow("upgrade", k)}
-        onDowngrade={(k) => openFlow("downgrade", k)}
-      />
-      <SupportPlanModal
-        open={supportOpen}
-        onClose={() => setSupportOpen(false)}
-        currentKey={tweaks.supportKey}
-      />
-      <FlowModal state={flow} onClose={closeFlow} />
-
-      <TweaksPanel
-        tweaks={tweaks}
-        setTweak={setTweak}
-        onOpenPlan={() => setPlanOpen(true)}
-        onOpenSupport={() => setSupportOpen(true)}
-        onOpenUpgrade={() => openFlow("upgrade", "pro")}
-        onOpenDowngrade={() => openFlow("downgrade", "starter")}
-        onOpenCancel={() => openFlow("cancel", null)}
-      />
-    </>
+    </div>
   );
 }

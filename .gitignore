@@ -1,9 +1,9 @@
 node_modules
-dist
-dist-ssr
-*.local
-.vite
+.next
+out
+*.log
 .DS_Store
 .env.local
 .env.*.local
-*.log
+next-env.d.ts
+tsconfig.tsbuildinfo

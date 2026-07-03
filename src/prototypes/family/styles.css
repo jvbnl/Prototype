@@ -1,0 +1,197 @@
+/* Family accounts prototype — injected on mount, removed on unmount.
+   Scoped to `fam-*` classes so it never leaks into other prototypes. */
+
+@keyframes famToastIn {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@keyframes famModalIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes famFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes famSectionIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Shell + back-to-gallery bar ── */
+.fam-shell {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+.fam-topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 16px;
+  background: #fbfbfa;
+  border-bottom: 1px solid #efeff1;
+  font: 500 12.5px ui-sans-serif, system-ui, -apple-system, sans-serif;
+  color: #52525b;
+}
+.fam-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #52525b;
+  font-weight: 600;
+  text-decoration: none;
+}
+.fam-back:hover { color: #18181b; }
+.fam-crumb { color: #a1a1aa; font-weight: 500; }
+.fam-screen { flex: 1; min-height: 0; }
+
+.fam-root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Interaction states inline styles can't express ── */
+.fam-input:focus {
+  border-color: #7a3ff2 !important;
+  box-shadow: 0 0 0 3px rgba(122, 63, 242, 0.12) !important;
+}
+.fam-hover-row { cursor: pointer; transition: background 0.12s ease; }
+.fam-hover-row:hover { background: #fafafb; }
+.fam-hover-violet { cursor: pointer; transition: background 0.12s ease; }
+.fam-hover-violet:hover { background: #f6f1fe; }
+
+/* ── Tweaks panel (shared visual language with the other prototypes) ── */
+.fam-twk-pill {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  padding: 8px 14px;
+  border: 0.5px solid rgba(0, 0, 0, 0.12);
+  background: rgba(250, 249, 247, 0.85);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border-radius: 999px;
+  color: #29261b;
+  font: 500 11.5px ui-sans-serif, system-ui, -apple-system, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+}
+.fam-twk-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  width: 264px;
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(250, 249, 247, 0.85);
+  color: #29261b;
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  backdrop-filter: blur(24px) saturate(160%);
+  border: 0.5px solid rgba(255, 255, 255, 0.6);
+  border-radius: 14px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset, 0 12px 40px rgba(0, 0, 0, 0.18);
+  font: 11.5px/1.4 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  overflow: hidden;
+}
+.fam-twk-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 8px 10px 14px;
+  user-select: none;
+}
+.fam-twk-hd b { font-size: 12px; font-weight: 600; letter-spacing: 0.01em; }
+.fam-twk-x {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(41, 38, 27, 0.55);
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.fam-twk-x:hover { background: rgba(0, 0, 0, 0.06); color: #29261b; }
+.fam-twk-body {
+  padding: 2px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.fam-twk-sect {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(41, 38, 27, 0.45);
+  padding: 6px 0 0;
+}
+.fam-twk-sect:first-child { padding-top: 0; }
+.fam-twk-row { display: flex; flex-direction: column; gap: 5px; }
+.fam-twk-row-h {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.fam-twk-lbl { color: rgba(41, 38, 27, 0.72); font-weight: 500; }
+.fam-twk-seg {
+  display: flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  gap: 2px;
+}
+.fam-twk-seg button {
+  appearance: none;
+  flex: 1;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 500;
+  min-height: 22px;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+.fam-twk-seg button.on {
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+.fam-twk-toggle {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.15);
+  transition: background 0.15s;
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+}
+.fam-twk-toggle[data-on="1"] { background: #7a3ff2; }
+.fam-twk-toggle i {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s;
+}
+.fam-twk-toggle[data-on="1"] i { transform: translateX(14px); }
